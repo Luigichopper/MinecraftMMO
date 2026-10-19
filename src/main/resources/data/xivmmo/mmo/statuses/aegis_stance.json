@@ -1,0 +1,12 @@
+{
+	"id": "xivmmo:aegis_stance",
+	"display_name": "Aegis Oath",
+	"type": "buff",
+	"default_duration_ticks": 72000,
+	"max_stacks": 1,
+	"damage_dealt_multiplier": 1.0,
+	"damage_taken_multiplier": 0.90,
+	"dot_potency": 0,
+	"hot_potency": 0,
+	"enmity_multiplier": 10.0
+}

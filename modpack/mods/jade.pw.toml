@@ -1,0 +1,14 @@
+name = "Jade ð"
+filename = "Jade-mc26.2-Fabric-26.2.11.jar"
+side = "both"
+
+[download]
+hash-format = "sha512"
+hash = "730e07dd5cbbf850ba0e7fd4852b528867d3e2fc2de63b156c89eee9ee6dd92d882b744f97fe724f2aa0afc5b468577486d9558f80d3e46cc5fa133ba241b9c9"
+mode = "metadata:curseforge"
+url = "https://cdn.modrinth.com/data/nvQzSEkH/versions/ue8CO97w/Jade-mc26.2-Fabric-26.2.11.jar"
+
+[update]
+[update.modrinth]
+mod-id = "nvQzSEkH"
+version = "ue8CO97w"

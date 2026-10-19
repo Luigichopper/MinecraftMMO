@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:hierophant",
+	"display_name": "Hierophant",
+	"role": "healer",
+	"base_mana": 10000,
+	"abilities": [
+		"xivmmo:astral_bolt",
+		"xivmmo:vital_mend",
+		"xivmmo:solace_pulse",
+		"xivmmo:radiant_halo",
+		"xivmmo:starfall_zone",
+		"xivmmo:aether_lance",
+		"xivmmo:vanguard_rush",
+		"xivmmo:shirk_step"
+	]
+}

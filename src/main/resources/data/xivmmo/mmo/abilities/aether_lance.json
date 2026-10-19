@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:aether_lance",
+	"display_name": "Aether Lance",
+	"category": "ogcd",
+	"target_type": "single_enemy",
+	"aoe_shape": "none",
+	"range": 25.0,
+	"cast_ticks": 0,
+	"recast_ticks": 300,
+	"cooldown_group": "xivmmo:cd_aether_lance",
+	"max_charges": 1,
+	"animation_lock_ticks": 12,
+	"mana_cost": 0,
+	"potency": 280,
+	"can_move_while_casting": true
+}

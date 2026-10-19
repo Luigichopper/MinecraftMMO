@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:lancer",
+	"display_name": "Lancer",
+	"role": "melee_dps",
+	"base_mana": 10000,
+	"abilities": [
+		"xivmmo:iron_slash",
+		"xivmmo:sunder_edge",
+		"xivmmo:royal_crest",
+		"xivmmo:fang_thrust",
+		"xivmmo:aether_lance",
+		"xivmmo:dragon_dive",
+		"xivmmo:vanguard_rush",
+		"xivmmo:vital_mend"
+	]
+}

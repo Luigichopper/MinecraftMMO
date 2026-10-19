@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:vanguard",
+	"display_name": "Vanguard",
+	"role": "tank",
+	"base_mana": 10000,
+	"abilities": [
+		"xivmmo:iron_slash",
+		"xivmmo:sunder_edge",
+		"xivmmo:royal_crest",
+		"xivmmo:eclipse_sweep",
+		"xivmmo:vanguard_rush",
+		"xivmmo:provoke_roar",
+		"xivmmo:shirk_step",
+		"xivmmo:vital_mend"
+	]
+}

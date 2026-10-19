@@ -1,0 +1,5 @@
+{
+	"message_id": "xivmmo.physical_ability",
+	"exhaustion": 0.05,
+	"scaling": "when_caused_by_living_non_player"
+}

@@ -1,0 +1,14 @@
+name = "Cardinal Components API"
+filename = "cardinal-components-api-8.0.1.jar"
+side = "both"
+
+[download]
+hash-format = "sha512"
+hash = "6c3507d9b2de856cf5ecb428c8cc038cfdfcf3f0756a2370dae3f6d6204d5315d5afbcf8b2c8fb5bb03a35d70a6401cb53574beb3b2ce52560b0b254d3c346c4"
+mode = "metadata:curseforge"
+url = "https://cdn.modrinth.com/data/K01OU20C/versions/d78LiKJ8/cardinal-components-api-8.0.1.jar"
+
+[update]
+[update.modrinth]
+mod-id = "K01OU20C"
+version = "d78LiKJ8"

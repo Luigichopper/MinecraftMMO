@@ -1,0 +1,107 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven {
+		name = "Modrinth"
+		url = "https://api.modrinth.com/maven"
+		content {
+			includeGroup "maven.modrinth"
+		}
+	}
+	maven {
+		name = "Terraformers"
+		url = "https://maven.terraformersmc.com/"
+	}
+	maven {
+		name = "isXander"
+		url = "https://maven.isxander.dev/releases"
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"xivmmo" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+
+	runs {
+		configureEach {
+			vmArg "-Dmixin.debug.export=true"
+			vmArg "-Dmixin.debug.verify=true"
+			if (System.getProperty("xivmmo.autoQuitOnTitleScreen") == "true") {
+				vmArg "-Dxivmmo.autoQuitOnTitleScreen=true"
+			}
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	clientCompileOnly "maven.modrinth:yacl:3.9.7+26.2-fabric"
+	clientCompileOnly "maven.modrinth:modmenu:20.0.3"
+
+	testImplementation sourceSets.client.output
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+	testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
+}
+
+processResources {
+	def modVersion = project.version
+	inputs.property "version", modVersion
+
+	filesMatching("fabric.mod.json") {
+		expand "version": modVersion
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.register('exportMrpack', Zip) {
+	group = 'distribution'
+	description = 'Packages the Modrinth .mrpack archive with modrinth.index.json and the built xivmmo mod jar in overrides/mods/.'
+	dependsOn tasks.named('jar')
+	archiveFileName = "xivmmo-modpack-${project.version}.mrpack"
+	destinationDirectory = layout.buildDirectory.dir('modpack')
+
+	from(layout.projectDirectory.file('modpack/modrinth.index.json')) {
+		into ''
+	}
+	from(tasks.named('jar')) {
+		into 'overrides/mods'
+	}
+}
+
+tasks.named('build') {
+	finalizedBy tasks.named('exportMrpack')
+}

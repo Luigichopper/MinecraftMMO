@@ -1,0 +1,63 @@
+{
+  "mmoModeEnabled": true,
+  "buildModeEnabled": false,
+  "defaultZoomDistance": 6.0,
+  "minZoomDistance": 1.5,
+  "maxZoomDistance": 16.0,
+  "zoomStep": 1.25,
+  "zoomSmoothing": 0.3,
+  "orbitSensitivity": 1.0,
+  "cameraHeightOffset": 0.25,
+  "cameraShoulderOffset": 0.0,
+  "autoFaceMovementDirection": true,
+  "hideVanillaHotbarInMmoMode": true,
+  "disableVanillaHotbarMechanicsInMmoMode": true,
+  "hideVanillaCrosshairInMmoMode": true,
+  "showMmoActionHotbar": true,
+  "armorMitigationScale": 0.5,
+  "hudLayout": {
+    "TARGET_FRAME": {
+      "normX": 0.5,
+      "normY": 0.05,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "FOCUS_TARGET": {
+      "normX": 0.78,
+      "normY": 0.16,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "CAST_BAR": {
+      "normX": 0.5,
+      "normY": 0.69,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "PLAYER_VITALS": {
+      "normX": 0.5,
+      "normY": 0.78,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "ACTION_HOTBAR": {
+      "normX": 0.5,
+      "normY": 0.87,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "PARTY_LIST": {
+      "normX": 0.08,
+      "normY": 0.28,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "COMBAT_TEXT": {
+      "normX": 0.56,
+      "normY": 0.42,
+      "scale": 1.0,
+      "enabled": true
+    }
+  },
+  "worldServerMmoOverrides": {}
+}

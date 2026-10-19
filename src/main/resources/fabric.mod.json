@@ -1,0 +1,43 @@
+{
+	"schemaVersion": 1,
+	"id": "xivmmo",
+	"version": "${version}",
+	"name": "XIV MMO Combat & Camera Overhaul",
+	"description": "FFXIV-inspired action RPG overhaul with free-cursor targeting, orbiting camera, GCD/oGCD ability weaving, cast bars, telegraphs, enmity, and data-driven jobs.",
+	"authors": [
+		"XivMmoTeam"
+	],
+	"contact": {
+		"sources": "https://github.com/xivmmo/xivmmo"
+	},
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.xivmmo.XivMmoMod"
+		],
+		"client": [
+			"net.xivmmo.client.XivMmoClient"
+		],
+		"modmenu": [
+			"net.xivmmo.client.compat.MmoModMenuCompat"
+		]
+	},
+	"mixins": [
+		"xivmmo.mixins.json",
+		{
+			"config": "xivmmo.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.1",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": ">=20.0.3",
+		"yet_another_config_lib_v3": ">=3.9.7"
+	}
+}

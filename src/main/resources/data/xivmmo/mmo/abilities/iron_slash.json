@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:iron_slash",
+	"display_name": "Iron Slash",
+	"category": "gcd",
+	"target_type": "single_enemy",
+	"aoe_shape": "none",
+	"range": 3.5,
+	"cast_ticks": 0,
+	"recast_ticks": 50,
+	"cooldown_group": "xivmmo:gcd",
+	"max_charges": 1,
+	"animation_lock_ticks": 12,
+	"mana_cost": 0,
+	"potency": 180,
+	"can_move_while_casting": true
+}

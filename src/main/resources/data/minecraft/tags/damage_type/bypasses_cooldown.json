@@ -1,0 +1,8 @@
+{
+	"replace": false,
+	"values": [
+		"xivmmo:physical_ability",
+		"xivmmo:magical_ability",
+		"xivmmo:unaspected_dot"
+	]
+}

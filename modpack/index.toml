@@ -1,0 +1,82 @@
+hash-format = "sha256"
+
+[[files]]
+file = "mods/fabric-api.pw.toml"
+hash = "fa34c19a4a16e31e22768a16967967961de7e09a5f1c61694da4567da25093c3"
+metafile = true
+[[files]]
+file = "mods/sodium.pw.toml"
+hash = "b5890c1b20f06f4cf7fd8d9bf87883e9d47faa3c2a003f975782ebeb88cebb63"
+metafile = true
+[[files]]
+file = "mods/iris.pw.toml"
+hash = "d0a93750e8f62027abac3a84f2efbea1c1777738c5265d8c941fbf6c0735140b"
+metafile = true
+[[files]]
+file = "mods/lithium.pw.toml"
+hash = "2474f39030042710ce41ba14bbdbfa90d2b9972909c1387578550a4fbe813cbe"
+metafile = true
+[[files]]
+file = "mods/ferrite-core.pw.toml"
+hash = "8c51f3d3f9503138699534f53bd4e6c70fd741a47ad7a068f58b7b213fc8026d"
+metafile = true
+[[files]]
+file = "mods/immediatelyfast.pw.toml"
+hash = "64a9089cb3268af9ffa7735872a6a5aa503a953f4aca59b359a548ad700d9458"
+metafile = true
+[[files]]
+file = "mods/entityculling.pw.toml"
+hash = "cbbed474a799fc20fb60cc59978040860d26b4c473194d066a73f616f7698fa3"
+metafile = true
+[[files]]
+file = "mods/yacl.pw.toml"
+hash = "f513574743616c14766ced37d7e0c08c44686d385f692092583d669088a72c3a"
+metafile = true
+[[files]]
+file = "mods/cloth-config.pw.toml"
+hash = "d5770b054eacb43f2d0e6f53a4ee4e47460e72b186d2f34964523bfb1f3944cd"
+metafile = true
+[[files]]
+file = "mods/architectury-api.pw.toml"
+hash = "ec11aaf53ea2be54760be0f2adc1cb8ad305fd7d8a406d2b4a0b8f7e32bf9951"
+metafile = true
+[[files]]
+file = "mods/geckolib.pw.toml"
+hash = "5fa990ef5b79191ea39184c83ce495c0a2c6d82ba14bee6a27c8fc71d603caaa"
+metafile = true
+[[files]]
+file = "mods/owo-lib.pw.toml"
+hash = "421a69f597d785fd8fed1c9d59ec2ece69409297e3e1e973c465a180627ff4c5"
+metafile = true
+[[files]]
+file = "mods/cardinal-components-api.pw.toml"
+hash = "8375f3e08272f120c01a25265d31e0424c8f022459bdd346fee70dc55d72b325"
+metafile = true
+[[files]]
+file = "mods/modmenu.pw.toml"
+hash = "88a925e22b9e8ed7c40cc01443ae141c341ff7efbccc0e9a72600e105427c6a5"
+metafile = true
+[[files]]
+file = "mods/jade.pw.toml"
+hash = "43ed23eb110d20ff36aad43471809c490fdc1c0ac79512df11cf0548a942e4a2"
+metafile = true
+[[files]]
+file = "mods/rei.pw.toml"
+hash = "b5fa837b1e9db6442907b3147079cd844a8032847dd92325d1f597efc5afeda3"
+metafile = true
+[[files]]
+file = "mods/xaeros-minimap.pw.toml"
+hash = "b836eb6187bec878767cc1c34c126d712d950ef997671a4c130c6e3dac64178d"
+metafile = true
+[[files]]
+file = "mods/spark.pw.toml"
+hash = "6176b8273a140c410b9b829d4d87773670e780db41a884c5f16b4f3d4a11111b"
+metafile = true
+[[files]]
+file = "shaderpacks/photon-shader.pw.toml"
+hash = "928fcd04e6bb478ee77b5271179087e0d771036c2e164b4cd324d72d58c99b8a"
+metafile = true
+[[files]]
+file = "shaderpacks/complementary-reimagined.pw.toml"
+hash = "f38b94fa52960006b45ceb4e860b98d43e410244e0cf55df85d7517fabcec22f"
+metafile = true

@@ -1,0 +1,16 @@
+{
+	"id": "xivmmo:arcanist",
+	"display_name": "Arcanist",
+	"role": "ranged_dps",
+	"base_mana": 10000,
+	"abilities": [
+		"xivmmo:astral_bolt",
+		"xivmmo:crimson_flare",
+		"xivmmo:starfall_zone",
+		"xivmmo:void_ring",
+		"xivmmo:aether_lance",
+		"xivmmo:dragon_dive",
+		"xivmmo:vanguard_rush",
+		"xivmmo:vital_mend"
+	]
+}
