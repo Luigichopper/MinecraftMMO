@@ -333,6 +333,52 @@ public final class MmoDataRegistry {
 			Optional.empty()
 		));
 
+		Identifier secondWindGroup = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "cd_second_wind");
+		Identifier aetherSprintGroup = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "cd_aether_sprint");
+		Identifier limitSurgeGroup = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "cd_limit_surge");
+		Identifier sanctuaryWardGroup = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "cd_sanctuary_ward");
+
+		Identifier secondWindId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "second_wind");
+		Identifier aetherSprintId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "aether_sprint");
+		Identifier limitSurgeId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "limit_surge");
+		Identifier sanctuaryWardId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "sanctuary_ward");
+
+		registerAbility(new AbilityDefinition(
+			secondWindId, "Second Wind",
+			AbilityDefinition.Category.OGCD, AbilityDefinition.TargetType.SELF_AOE, AbilityDefinition.AoeShape.CIRCLE,
+			0.0F, 3.0F, 0.0F, 360.0F,
+			0, 600, secondWindGroup, 1, 10, 0,
+			450, Optional.empty(), 0, AbilityDefinition.Positional.NONE, 0, true,
+			Optional.of(regenGraceId)
+		));
+
+		registerAbility(new AbilityDefinition(
+			aetherSprintId, "Aether Sprint",
+			AbilityDefinition.Category.OGCD, AbilityDefinition.TargetType.SELF_AOE, AbilityDefinition.AoeShape.CIRCLE,
+			0.0F, 4.0F, 0.0F, 360.0F,
+			0, 600, aetherSprintGroup, 1, 10, 0,
+			0, Optional.empty(), 0, AbilityDefinition.Positional.NONE, 0, true,
+			Optional.of(battleFocusId)
+		));
+
+		registerAbility(new AbilityDefinition(
+			limitSurgeId, "Limit Surge",
+			AbilityDefinition.Category.OGCD, AbilityDefinition.TargetType.SINGLE_ENEMY, AbilityDefinition.AoeShape.NONE,
+			20.0F, 0.0F, 0.0F, 90.0F,
+			0, 900, limitSurgeGroup, 1, 14, 0,
+			550, Optional.empty(), 0, AbilityDefinition.Positional.NONE, 0, true,
+			Optional.of(battleFocusId)
+		));
+
+		registerAbility(new AbilityDefinition(
+			sanctuaryWardId, "Sanctuary Ward",
+			AbilityDefinition.Category.OGCD, AbilityDefinition.TargetType.SELF_AOE, AbilityDefinition.AoeShape.CIRCLE,
+			0.0F, 6.0F, 0.0F, 360.0F,
+			0, 600, sanctuaryWardGroup, 1, 10, 0,
+			0, Optional.empty(), 0, AbilityDefinition.Positional.NONE, 0, true,
+			Optional.of(ironBulwarkId)
+		));
+
 		// 1. TANK: Vanguard
 		Identifier vanguardId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "vanguard");
 		JOBS.put(vanguardId, new JobDefinition(
@@ -340,7 +386,11 @@ public final class MmoDataRegistry {
 			"Vanguard",
 			JobDefinition.Role.TANK,
 			10000,
-			List.of(ironSlashId, sunderEdgeId, royalCrestId, eclipseSweepId, vanguardRushId, provokeRoarId, shirkStepId, vitalMendId)
+			List.of(
+				ironSlashId, sunderEdgeId, royalCrestId, eclipseSweepId,
+				vanguardRushId, provokeRoarId, shirkStepId, vitalMendId,
+				secondWindId, aetherSprintId, sanctuaryWardId, limitSurgeId
+			)
 		));
 
 		// 2. HEALER: Hierophant
@@ -350,7 +400,11 @@ public final class MmoDataRegistry {
 			"Hierophant",
 			JobDefinition.Role.HEALER,
 			10000,
-			List.of(astralBoltId, vitalMendId, solacePulseId, radiantHaloId, starfallZoneId, aetherLanceId, vanguardRushId, shirkStepId)
+			List.of(
+				astralBoltId, vitalMendId, solacePulseId, radiantHaloId,
+				starfallZoneId, aetherLanceId, vanguardRushId, shirkStepId,
+				secondWindId, aetherSprintId, sanctuaryWardId, limitSurgeId
+			)
 		));
 
 		// 3. MELEE DPS: Lancer
@@ -360,7 +414,11 @@ public final class MmoDataRegistry {
 			"Lancer",
 			JobDefinition.Role.MELEE_DPS,
 			10000,
-			List.of(ironSlashId, sunderEdgeId, royalCrestId, fangThrustId, aetherLanceId, dragonDiveId, vanguardRushId, vitalMendId)
+			List.of(
+				ironSlashId, sunderEdgeId, royalCrestId, fangThrustId,
+				aetherLanceId, dragonDiveId, vanguardRushId, vitalMendId,
+				secondWindId, aetherSprintId, sanctuaryWardId, limitSurgeId
+			)
 		));
 
 		// 4. RANGED DPS: Arcanist
@@ -370,7 +428,11 @@ public final class MmoDataRegistry {
 			"Arcanist",
 			JobDefinition.Role.RANGED_DPS,
 			10000,
-			List.of(astralBoltId, crimsonFlareId, starfallZoneId, voidRingId, aetherLanceId, dragonDiveId, vanguardRushId, vitalMendId)
+			List.of(
+				astralBoltId, crimsonFlareId, starfallZoneId, voidRingId,
+				aetherLanceId, dragonDiveId, vanguardRushId, vitalMendId,
+				secondWindId, aetherSprintId, sanctuaryWardId, limitSurgeId
+			)
 		));
 	}
 

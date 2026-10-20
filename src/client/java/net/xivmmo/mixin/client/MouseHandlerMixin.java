@@ -64,6 +64,10 @@ public abstract class MouseHandlerMixin {
 			return;
 		}
 		if (!MmoInputHandler.isFreeCursorMode()) {
+			if (action == 1 && rawButtonInfo.button() == 0 && MmoInputHandler.isMmoModeActive()
+				&& this.minecraft.crosshairPickEntity instanceof net.minecraft.world.entity.LivingEntity crosshairLiving) {
+				net.xivmmo.client.target.ClientTargetManager.get().setHardTarget(crosshairLiving);
+			}
 			return;
 		}
 
@@ -75,6 +79,9 @@ public abstract class MouseHandlerMixin {
 		// When Alt (Block Interact Modifier) is held in Free-Cursor Mode, allow vanilla block/item actions
 		// while keeping the cursor free (grabMouse is guarded below).
 		if (MmoInputHandler.isBlockInteractionAllowed()) {
+			if (pressed && button == 0 && this.minecraft.crosshairPickEntity instanceof net.minecraft.world.entity.LivingEntity crosshairLiving) {
+				net.xivmmo.client.target.ClientTargetManager.get().setHardTarget(crosshairLiving);
+			}
 			return;
 		}
 
@@ -115,9 +122,18 @@ public abstract class MouseHandlerMixin {
 		if (this.minecraft.gui.screen() != null || this.minecraft.gui.overlay() != null || this.minecraft.player == null) {
 			return;
 		}
-		// In MMO Mode (unless holding Alt to scroll vanilla hotbar), scroll wheel controls camera zoom
+		// In MMO Mode (unless holding Alt to scroll vanilla hotbar), scroll wheel controls Chat Log (if hovered) or camera zoom
 		if (MmoInputHandler.isMmoModeActive() && !MmoInputHandler.isBlockInteractModifierDown()) {
 			this.minecraft.getFramerateLimitTracker().onInputReceived();
+			Window window = this.minecraft.getWindow();
+			double guiX = MouseHandler.getScaledXPos(window, this.xpos);
+			double guiY = MouseHandler.getScaledYPos(window, this.ypos);
+			if (net.xivmmo.client.chat.FfxivChatManager.get().tryScrollChatHud(
+				guiX, guiY, window.getGuiScaledWidth(), window.getGuiScaledHeight(), yoffset
+			)) {
+				ci.cancel();
+				return;
+			}
 			boolean discreteScroll = this.minecraft.options.discreteMouseScroll().get();
 			double scrollSensitivity = this.minecraft.options.mouseWheelSensitivity().get();
 			double scaledYOffset = (discreteScroll ? Math.signum(yoffset) : yoffset) * scrollSensitivity;

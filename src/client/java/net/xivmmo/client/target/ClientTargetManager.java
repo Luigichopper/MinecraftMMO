@@ -94,11 +94,15 @@ public final class ClientTargetManager {
 
 	/**
 	 * Handles Left-Click in Free-Cursor MMO Mode: selects the entity under the cursor as Hard Target.
-	 * Clicking empty space when no entity is hovered leaves the current target (or clears if configured).
+	 * Falls back to the current Soft Target if hovered on this frame.
 	 */
 	public void onCursorLeftClick(double cursorX, double cursorY) {
 		LivingEntity picked = CursorRaycaster.get().pickEntityNow(cursorX, cursorY, CursorRaycaster.DEFAULT_MAX_TARGET_RANGE);
+		if (picked == null) {
+			picked = getSoftTarget();
+		}
 		if (picked != null) {
+			this.softTargetId = picked.getId();
 			setHardTarget(picked);
 		}
 	}

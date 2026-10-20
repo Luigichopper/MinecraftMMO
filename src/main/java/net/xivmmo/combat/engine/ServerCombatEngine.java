@@ -29,7 +29,9 @@ import net.xivmmo.combat.status.StatusManager;
 import net.xivmmo.combat.telegraph.TelegraphManager;
 import net.xivmmo.combat.telegraph.TelegraphShapes;
 import net.xivmmo.data.MmoDataRegistry;
+import net.xivmmo.inventory.MmoInventoryState;
 import net.xivmmo.network.MmoNetwork;
+import net.xivmmo.progression.JobProgressionState;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -49,6 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Enmity (hate list) generation and Enemy AI target override ({@link EnmityManager})
  * - Timed Enemy & Ground AoE Telegraphs ({@link TelegraphManager})
  * - Boss Arena Encounters ({@link BossArenaManager})
+ * - FFXIV Job Leveling & EXP Progression ({@link JobProgressionState}) and 140-Slot Inventory ({@link MmoInventoryState})
  */
 public final class ServerCombatEngine {
 	private static final Map<UUID, ServerPlayerSession> SESSIONS = new ConcurrentHashMap<>();
@@ -80,6 +83,8 @@ public final class ServerCombatEngine {
 	public static final class ServerPlayerSession {
 		private final UUID playerUuid;
 		private final PlayerCombatState combatState = new PlayerCombatState();
+		private final JobProgressionState progression = new JobProgressionState();
+		private final MmoInventoryState inventory = new MmoInventoryState();
 		private Identifier activeJobId = Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "vanguard");
 		private int hardTargetId = -1;
 		private int focusTargetId = -1;
@@ -93,6 +98,14 @@ public final class ServerCombatEngine {
 
 		public PlayerCombatState combatState() {
 			return this.combatState;
+		}
+
+		public JobProgressionState progression() {
+			return this.progression;
+		}
+
+		public MmoInventoryState inventory() {
+			return this.inventory;
 		}
 
 		public Identifier activeJobId() {
@@ -169,13 +182,30 @@ public final class ServerCombatEngine {
 					session.activeJobId = job.id();
 					player.sendSystemMessage(Component.literal(String.format(
 						Locale.ROOT,
-						"[XIVMMO] Switched Job to %s (%s)",
-						job.displayName(),
+						"You change to %s. (Lv. %d %s)",
+						job.displayName().toLowerCase(Locale.ROOT),
+						session.progression.getLevel(job.id()),
 						job.role().getSerializedName().toUpperCase(Locale.ROOT)
-					)).withStyle(ChatFormatting.AQUA));
+					)).withStyle(ChatFormatting.GRAY));
+					syncProgressionState(player, session);
 					syncPartyState(player.level().getServer());
 				}
 			}
+		);
+
+		ServerPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.C2SInventoryActionPayload.TYPE,
+			(payload, context) -> handleInventoryAction(context.player(), payload)
+		);
+
+		ServerPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.C2SLevelCommandPayload.TYPE,
+			(payload, context) -> handleLevelCommand(context.player(), payload)
+		);
+
+		ServerPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.C2SChatChannelPayload.TYPE,
+			(payload, context) -> handleChatChannelMessage(context.player(), payload)
 		);
 
 		ServerPlayNetworking.registerGlobalReceiver(
@@ -185,6 +215,15 @@ public final class ServerCombatEngine {
 				BOSS_ARENA_MANAGER.spawnArenaEncounter(player, payload.arenaId(), ENMITY_MANAGER);
 			}
 		);
+
+		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+			ServerPlayer player = handler.player;
+			if (player != null) {
+				ServerPlayerSession session = getOrCreateSession(player);
+				syncProgressionState(player, session);
+				syncInventoryState(player, session);
+			}
+		});
 
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
 			if (handler.player != null) {
@@ -483,6 +522,10 @@ public final class ServerCombatEngine {
 			if (hudSyncCounter % 5 == 0) {
 				syncCombatHudState(player, session);
 			}
+			if (hudSyncCounter % 20 == 0) {
+				syncProgressionState(player, session);
+				syncInventoryState(player, session);
+			}
 		}
 
 		if (hudSyncCounter % 10 == 0) {
@@ -662,7 +705,9 @@ public final class ServerCombatEngine {
 		AbilityDefinition def = exec.ability();
 		player.swing(InteractionHand.MAIN_HAND, true);
 
-		float attackerOutMult = STATUS_MANAGER.computeOutgoingDamageMultiplier(player.getUUID(), MmoDataRegistry::getStatus);
+		int jobLevel = session.progression.getLevel(session.activeJobId);
+		float levelScale = JobProgressionState.getLevelOutputMultiplier(jobLevel);
+		float attackerOutMult = STATUS_MANAGER.computeOutgoingDamageMultiplier(player.getUUID(), MmoDataRegistry::getStatus) * levelScale;
 		float attackerEnmityMult = STATUS_MANAGER.computeEnmityMultiplier(player.getUUID(), MmoDataRegistry::getStatus);
 		double attackerWeaponDmg = player.getAttributeValue(Attributes.ATTACK_DAMAGE);
 
@@ -709,6 +754,10 @@ public final class ServerCombatEngine {
 					healAmount,
 					def.potency()
 				)).withStyle(ChatFormatting.GREEN));
+
+				if (def.potency() > 0) {
+					awardCombatExpAndGil(player, session, 25L + def.potency() / 12L, 5L, false);
+				}
 				break;
 			}
 
@@ -745,6 +794,7 @@ public final class ServerCombatEngine {
 							broadcastCombatText(level, p, String.format(Locale.ROOT, "+%.1f %s", healAmt, def.displayName()), 0xFF55FFAA, true);
 						}
 					}
+					awardCombatExpAndGil(player, session, 45L, 8L, false);
 					break;
 				}
 
@@ -760,6 +810,7 @@ public final class ServerCombatEngine {
 					player
 				);
 				int hitCount = 0;
+				int killCount = 0;
 				float totalDmg = 0.0F;
 				for (LivingEntity victim : victims) {
 					float inMult = STATUS_MANAGER.computeIncomingDamageMultiplier(victim.getUUID(), MmoDataRegistry::getStatus);
@@ -775,6 +826,9 @@ public final class ServerCombatEngine {
 					if (victim.hurtServer(level, source, dmg)) {
 						hitCount++;
 						totalDmg = dmg;
+						if (!victim.isAlive()) {
+							killCount++;
+						}
 						applyOptionalStatus(player, victim, def);
 						ENMITY_MANAGER.addEnmity(victim.getUUID(), player.getUUID(), Math.round(dmg * 100.0F * attackerEnmityMult));
 						updateMobEnmityTarget(level, victim);
@@ -795,6 +849,9 @@ public final class ServerCombatEngine {
 					totalDmg,
 					def.potency()
 				)).withStyle(ChatFormatting.GOLD));
+				if (hitCount > 0) {
+					awardCombatExpAndGil(player, session, 35L * hitCount + 120L * killCount, 10L * hitCount + 45L * killCount, killCount > 0);
+				}
 				break;
 			}
 
@@ -852,6 +909,7 @@ public final class ServerCombatEngine {
 				);
 				target.invulnerableTime = 0;
 				target.hurtServer(level, source, dmg);
+				boolean killedTarget = !target.isAlive();
 
 				applyOptionalStatus(player, target, def);
 
@@ -877,11 +935,198 @@ public final class ServerCombatEngine {
 					effectivePotency,
 					tags
 				)).withStyle(positionalBonusHit ? ChatFormatting.LIGHT_PURPLE : (exec.comboMatched() ? ChatFormatting.GOLD : ChatFormatting.AQUA)));
+
+				long expReward = 35L + (effectivePotency / 10L) + (exec.comboMatched() ? 25L : 0L) + (positionalBonusHit ? 35L : 0L) + (killedTarget ? 160L : 0L);
+				long gilReward = 8L + (killedTarget ? 55L : 0L);
+				awardCombatExpAndGil(player, session, expReward, gilReward, killedTarget);
 				break;
 			}
 		}
 
 		syncCombatHudState(player, session);
+	}
+
+	private static void awardCombatExpAndGil(
+		ServerPlayer player,
+		ServerPlayerSession session,
+		long baseExp,
+		long gilAdded,
+		boolean killedEnemy
+	) {
+		long nowMs = System.currentTimeMillis();
+		JobProgressionState.ExpGainResult result = session.progression.awardExp(
+			session.activeJobId,
+			baseExp,
+			gilAdded,
+			nowMs
+		);
+
+		JobDefinition job = MmoDataRegistry.getJob(session.activeJobId);
+		String jobName = job != null ? job.displayName() : session.activeJobId.getPath();
+
+		if (killedEnemy && result.totalExpGained() > 0) {
+			String chainTag = result.chainCount() > 0 ? String.format(Locale.ROOT, " [Chain #%d]", result.chainCount()) : "";
+			player.sendSystemMessage(Component.literal(
+				result.formatChatLogMessage(jobName) + chainTag + " (+" + result.gilGained() + " Gil)"
+			).withStyle(ChatFormatting.YELLOW));
+		}
+
+		if (result.leveledUp()) {
+			broadcastCombatText(
+				player.level(),
+				player,
+				String.format(Locale.ROOT, "LEVEL UP! %s Lv. %d", jobName.toUpperCase(Locale.ROOT), result.newLevel()),
+				0xFFFFDF55,
+				true
+			);
+			player.sendSystemMessage(Component.literal(String.format(
+				Locale.ROOT,
+				"★ [FFXIV LEVEL UP] You attained %s Level %d! ★",
+				jobName,
+				result.newLevel()
+			)).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+			syncPartyState(player.level().getServer());
+		}
+
+		syncProgressionState(player, session);
+	}
+
+	private static void handleInventoryAction(ServerPlayer player, MmoNetwork.C2SInventoryActionPayload payload) {
+		ServerPlayerSession session = getOrCreateSession(player);
+		MmoInventoryState inv = session.inventory;
+
+		switch (payload.actionType()) {
+			case SWAP_SLOTS -> inv.swapOrMergeSlots(player, payload.firstSlot(), payload.secondSlot());
+			case RIGHT_CLICK_SLOT -> {
+				Identifier switchedJob = inv.handleRightClickSlot(player, payload.firstSlot());
+				if (switchedJob != null) {
+					JobDefinition job = MmoDataRegistry.getJob(switchedJob);
+					if (job != null) {
+						session.activeJobId = job.id();
+						player.sendSystemMessage(Component.literal(String.format(
+							Locale.ROOT,
+							"[XIVMMO] Soul Crystal equipped: Switched Job to %s (Lv. %d)",
+							job.displayName(),
+							session.progression.getLevel(job.id())
+						)).withStyle(ChatFormatting.GOLD));
+						syncProgressionState(player, session);
+						syncPartyState(player.level().getServer());
+					}
+				}
+			}
+			case SORT_INVENTORY -> {
+				inv.sortMainInventory(player);
+				player.sendSystemMessage(Component.literal("[XIVMMO] Inventory sorted by FFXIV item category & stack count.")
+					.withStyle(ChatFormatting.GRAY));
+			}
+			case REQUEST_SYNC -> {
+				// Simply sync below
+			}
+		}
+
+		syncInventoryState(player, session);
+		syncProgressionState(player, session);
+	}
+
+	private static void handleLevelCommand(ServerPlayer player, MmoNetwork.C2SLevelCommandPayload payload) {
+		ServerPlayerSession session = getOrCreateSession(player);
+		if (payload.isSetLevel()) {
+			session.progression.setLevel(session.activeJobId, payload.value());
+			player.sendSystemMessage(Component.literal(String.format(
+				Locale.ROOT,
+				"[XIVMMO] Set %s level to Lv. %d",
+				session.activeJobId.getPath(),
+				session.progression.getLevel(session.activeJobId)
+			)).withStyle(ChatFormatting.GOLD));
+		} else {
+			awardCombatExpAndGil(player, session, payload.value(), 50L, true);
+		}
+		syncProgressionState(player, session);
+		syncPartyState(player.level().getServer());
+	}
+
+	private static void handleChatChannelMessage(ServerPlayer sender, MmoNetwork.C2SChatChannelPayload payload) {
+		String body = payload.messageBody() != null ? payload.messageBody().trim() : "";
+		if (body.isEmpty()) {
+			return;
+		}
+		net.xivmmo.chat.FfxivChatChannel channel;
+		try {
+			channel = net.xivmmo.chat.FfxivChatChannel.valueOf(payload.channelName().toUpperCase(Locale.ROOT));
+		} catch (IllegalArgumentException e) {
+			channel = net.xivmmo.chat.FfxivChatChannel.SAY;
+		}
+
+		String senderName = sender.getName().getString();
+		MinecraftServer server = sender.level().getServer();
+
+		if (channel == net.xivmmo.chat.FfxivChatChannel.TELL) {
+			String targetName = payload.targetPlayer() != null ? payload.targetPlayer().trim() : "";
+			if (targetName.isEmpty()) {
+				ServerPlayNetworking.send(sender, new MmoNetwork.S2CChatChannelPayload(
+					net.xivmmo.chat.FfxivChatChannel.SYSTEM.name(),
+					"",
+					"Unable to send Tell: Specify a player name (/tell <player> <message>)."
+				));
+				return;
+			}
+			ServerPlayer recipient = server.getPlayerList().getPlayerByName(targetName);
+			String outFormatted = net.xivmmo.chat.FfxivChatChannel.formatSocialMessage(
+				net.xivmmo.chat.FfxivChatChannel.TELL, senderName, recipient != null ? recipient.getName().getString() : targetName, body, true
+			);
+			ServerPlayNetworking.send(sender, new MmoNetwork.S2CChatChannelPayload(
+				net.xivmmo.chat.FfxivChatChannel.TELL.name(),
+				recipient != null ? recipient.getName().getString() : targetName,
+				outFormatted
+			));
+			if (recipient != null && recipient != sender) {
+				String inFormatted = net.xivmmo.chat.FfxivChatChannel.formatSocialMessage(
+					net.xivmmo.chat.FfxivChatChannel.TELL, senderName, recipient.getName().getString(), body, false
+				);
+				ServerPlayNetworking.send(recipient, new MmoNetwork.S2CChatChannelPayload(
+					net.xivmmo.chat.FfxivChatChannel.TELL.name(),
+					senderName,
+					inFormatted
+				));
+			}
+			return;
+		}
+
+		String formatted = net.xivmmo.chat.FfxivChatChannel.formatSocialMessage(channel, senderName, "", body, false);
+		MmoNetwork.S2CChatChannelPayload outPkt = new MmoNetwork.S2CChatChannelPayload(
+			channel.name(),
+			senderName,
+			formatted
+		);
+
+		for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+			boolean deliver = switch (channel) {
+				case SAY -> p.level() == sender.level() && p.distanceToSqr(sender) <= 32.0 * 32.0;
+				case YELL -> p.level() == sender.level() && p.distanceToSqr(sender) <= 96.0 * 96.0;
+				case SHOUT -> p.level() == sender.level();
+				default -> true; // PARTY, FREE_COMPANY, etc.
+			};
+			if (deliver) {
+				ServerPlayNetworking.send(p, outPkt);
+			}
+		}
+	}
+
+	public static void syncProgressionState(ServerPlayer player, ServerPlayerSession session) {
+		ServerPlayNetworking.send(player, new MmoNetwork.S2CProgressionSyncPayload(
+			session.activeJobId,
+			session.progression.getAllJobEntries(),
+			session.progression.getArmouryBonusPercent(session.activeJobId),
+			session.progression.getGil()
+		));
+	}
+
+	public static void syncInventoryState(ServerPlayer player, ServerPlayerSession session) {
+		ServerPlayNetworking.send(player, new MmoNetwork.S2CInventorySyncPayload(
+			session.inventory.getExpandedBagCopy(),
+			session.inventory.getKeyItemsCopy(),
+			session.progression.getGil()
+		));
 	}
 
 	private static void applyOptionalStatus(ServerPlayer caster, LivingEntity primaryTarget, AbilityDefinition def) {
@@ -959,6 +1204,7 @@ public final class ServerCombatEngine {
 				p.getName().getString(),
 				s.activeJobId,
 				roleStr,
+				s.progression.getLevel(s.activeJobId),
 				p.getHealth(),
 				p.getMaxHealth(),
 				s.combatState.getMana(),

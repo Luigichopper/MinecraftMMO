@@ -107,6 +107,7 @@ public final class WorldTelegraphRenderer {
 		Vec3 camPos = context.levelState().cameraRenderState.pos;
 		float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(true);
 
+		ClientTargetManager.get().updateFrame();
 		LivingEntity hardTarget = ClientTargetManager.get().getHardTarget();
 		LivingEntity softTarget = ClientTargetManager.get().getSoftTarget();
 		LivingEntity focusTarget = ClientTargetManager.get().getFocusTarget();

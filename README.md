@@ -49,7 +49,11 @@ An FFXIV-inspired action-MMO combat, free-cursor camera, targeting, telegraph, a
 | **LMB + RMB Held** | Mouse 1 + Mouse 2 | Move forward along camera heading |
 | **Scroll Wheel** | Mouse Scroll | Smooth camera zoom (`1.5m` – `16.0m`, does **not** cycle vanilla hotbar) |
 | **WASD** | Movement Keys | Camera-relative movement & strafing (auto-faces movement direction unless casting) |
-| **`1` – `8`** | Number Keys `1`–`8` | Trigger MMO Action Hotbar slots `1`–`8` (vanilla hotbar slot switching is disabled & locked) |
+| **`1` – `9`, `0`, `-`, `=`** | Hotbar Keys `1`–`=` | Trigger 12-slot FFXIV Action Hotbar slots `1`–`12` (vanilla hotbar slot switching is disabled & locked) |
+| **`Enter` / `T` / `/` or Click Chat Bar** | `Enter` / `T` / `/` | Focus **Bottom-Left FFXIV Chat Input Bar** (with `General`/`Battle`/`Event`/`+` filter tabs, `/s`, `/p`, `/sh`, `/y`, `/fc`, `/t`, `/r` channels, & `◖◗` Auto-Translate Dictionary) |
+| **`I` or `E`** | `I` / `E` | Open **FFXIV 140-Slot Inventory Window** (`4 x 35` `5x7` quadrants + `Key Items & Crystals` tab + Auto-Sort) |
+| **`C`** | `C` | Open **FFXIV Character Window** (Attributes, Armoury Gear Slots, Soul Crystal, Job Level & EXP) |
+| **`P`** | `P` | Open **FFXIV Actions & Traits Window** (Job Actions, Role Actions, Traits, click to assign to hotbar) |
 | **`Tab` / `Shift+Tab`** | `Tab` | Cycle forward/reverse through hostile targets in camera cone |
 | **`F`** | `F` | Set / clear Focus Target on current target |
 | **`Escape`** | `Esc` | Clear Hard Target first; opens Pause Menu if no target is selected |
@@ -64,9 +68,15 @@ An FFXIV-inspired action-MMO combat, free-cursor camera, targeting, telegraph, a
 
 ## 4. In-Game `/mmo` Command Reference
 
+- `/mmo inventory` — Open the FFXIV 140-Slot Inventory window (`FfxivInventoryScreen`).
+- `/mmo character` — Open the FFXIV Character Attributes & Armoury window (`FfxivCharacterScreen`).
+- `/mmo actions` — Open the FFXIV Actions & Traits window (`FfxivActionsScreen`).
+- `/mmo chat <general|battle|event|all|clear|timestamps>` — Switch FFXIV Chat Log filter tabs, toggle `[HH:mm]` timestamps, or clear the chat log.
+- `/mmo level <1..50>` — Set the current Job's level (`1..50`) and sync attributes & unlocked actions.
+- `/mmo exp <amount>` — Award EXP to the active Job (applies Armoury Bonus if below your highest Job level).
 - `/mmo hud` — Open the interactive drag-and-drop HUD Layout Editor (`HudLayoutScreen`).
 - `/mmo config` — Open the YetAnotherConfigLib (YACL) configuration screen.
-- `/mmo job <vanguard|hierophant|lancer|arcanist>` — Switch playable Job and load its 8-ability kit.
+- `/mmo job <vanguard|hierophant|lancer|arcanist>` — Switch playable Job and load its 12-ability kit.
 - `/mmo arena <sunforge|void_sanctum>` — Spawn a Boss Arena encounter with timed multi-shape AoE telegraphs.
 - `/mmo cast <ability_id>` — Trigger an ability by ID.
 - `/mmo telegraph <circle|cone|line|donut>` — Spawn a 3.0s test telegraph on your target or self.

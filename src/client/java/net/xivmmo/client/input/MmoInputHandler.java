@@ -164,6 +164,10 @@ public final class MmoInputHandler {
 			return;
 		}
 
+		if (net.xivmmo.client.chat.FfxivChatManager.get().tryClickChatHud(guiX, guiY, sw, sh)) {
+			return;
+		}
+
 		ClientTargetManager.get().onCursorLeftClick(rawCursorX, rawCursorY);
 	}
 
@@ -198,6 +202,18 @@ public final class MmoInputHandler {
 
 		while (MmoKeybinds.KEY_OPEN_HUD_EDITOR.consumeClick()) {
 			mc.gui.setScreen(new net.xivmmo.client.hud.HudLayoutScreen(null));
+		}
+
+		while (MmoKeybinds.KEY_OPEN_INVENTORY.consumeClick()) {
+			mc.gui.setScreen(new net.xivmmo.client.screen.FfxivInventoryScreen());
+		}
+
+		while (MmoKeybinds.KEY_OPEN_CHARACTER.consumeClick()) {
+			mc.gui.setScreen(new net.xivmmo.client.screen.FfxivCharacterScreen());
+		}
+
+		while (MmoKeybinds.KEY_OPEN_ACTIONS.consumeClick()) {
+			mc.gui.setScreen(new net.xivmmo.client.screen.FfxivActionsScreen());
 		}
 
 		while (MmoKeybinds.KEY_CYCLE_HOTBAR_PAGE.consumeClick()) {

@@ -59,19 +59,19 @@ class Milestone7And8Test {
 
 		assertNotNull(vanguard);
 		assertEquals(JobDefinition.Role.TANK, vanguard.role());
-		assertEquals(8, vanguard.abilities().size());
+		assertEquals(12, vanguard.abilities().size());
 
 		assertNotNull(hierophant);
 		assertEquals(JobDefinition.Role.HEALER, hierophant.role());
-		assertEquals(8, hierophant.abilities().size());
+		assertEquals(12, hierophant.abilities().size());
 
 		assertNotNull(lancer);
 		assertEquals(JobDefinition.Role.MELEE_DPS, lancer.role());
-		assertEquals(8, lancer.abilities().size());
+		assertEquals(12, lancer.abilities().size());
 
 		assertNotNull(arcanist);
 		assertEquals(JobDefinition.Role.RANGED_DPS, arcanist.role());
-		assertEquals(8, arcanist.abilities().size());
+		assertEquals(12, arcanist.abilities().size());
 
 		// Verify every ability referenced by every job exists in MmoDataRegistry
 		for (JobDefinition job : MmoDataRegistry.getAllJobs()) {

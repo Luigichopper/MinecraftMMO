@@ -39,14 +39,45 @@ public abstract class MinecraftInputMixin {
 
 	@Inject(method = "handleKeybinds", at = @At("HEAD"))
 	private void xivmmo$disableVanillaHotbarMechanicsInMmoMode(CallbackInfo ci) {
+		// Intercept 'E' (Inventory key) in Free-Cursor MMO Mode to open the 140-slot FFXIV Inventory Screen
+		if (MmoInputHandler.isFreeCursorMode() && net.xivmmo.config.MmoConfig.get().replaceVanillaInventoryInMmoMode) {
+			while (this.options.keyInventory.consumeClick()) {
+				Minecraft.getInstance().gui.setScreen(new net.xivmmo.client.screen.FfxivInventoryScreen());
+			}
+		}
+
+		// Intercept Chat ('Enter'/'T') and Command ('/') keys in MMO Mode to open the in-place FFXIV Chat Screen
+		if (MmoInputHandler.isMmoModeActive() && net.xivmmo.config.MmoConfig.get().useFfxivChatInMmoMode) {
+			Minecraft mc = Minecraft.getInstance();
+			while (this.options.keyChat.consumeClick()) {
+				if (mc.player != null) {
+					mc.gui.hud.getChat().openScreen(
+						net.minecraft.client.gui.components.ChatComponent.ChatMethod.MESSAGE,
+						net.xivmmo.client.screen.FfxivChatScreen::new
+					);
+				}
+			}
+			if (mc.gui.screen() == null && mc.gui.overlay() == null) {
+				while (this.options.keyCommand.consumeClick()) {
+					if (mc.player != null) {
+						mc.gui.hud.getChat().openScreen(
+							net.minecraft.client.gui.components.ChatComponent.ChatMethod.COMMAND,
+							net.xivmmo.client.screen.FfxivChatScreen::new
+						);
+					}
+				}
+			}
+		}
+
 		if (!MmoHudManager.shouldDisableVanillaHotbarMechanics()) {
 			return;
 		}
 
-		// 1. Drain 1-9 hotbar slot keys so pressing 1-8 for MMO abilities (or 9) never switches the vanilla hotbar slot
-		for (KeyMapping hotbarKey : this.options.keyHotbarSlots) {
+		// 1. Drain 1-9 vanilla hotbar slot keys and route them directly to FFXIV Hotbar Slots 1-9 (indices 0..8)
+		for (int i = 0; i < this.options.keyHotbarSlots.length; i++) {
+			KeyMapping hotbarKey = this.options.keyHotbarSlots[i];
 			while (hotbarKey.consumeClick()) {
-				// drained
+				net.xivmmo.client.combat.ClientCombatPredictor.get().requestAbilitySlot(i);
 			}
 			hotbarKey.setDown(false);
 		}

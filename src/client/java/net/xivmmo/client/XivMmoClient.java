@@ -38,6 +38,14 @@ public class XivMmoClient implements ClientModInitializer {
 		MmoConfig.get();
 		MmoKeybinds.register();
 		ClientCombatPredictor.get().registerNetworking();
+		net.xivmmo.client.chat.FfxivChatManager.get().registerClientHooks();
+		ClientPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.S2CChatChannelPayload.TYPE,
+			(payload, context) -> {
+				net.xivmmo.debug.MmoDebugState.recordPacket("S2C", "S2CChatChannel", payload.channelName());
+				net.xivmmo.client.chat.FfxivChatManager.get().onReceiveChannelPacket(payload);
+			}
+		);
 		WorldTelegraphRenderer.register();
 		net.xivmmo.client.hud.MmoHudManager.registerVanillaHudOverrides();
 
@@ -246,6 +254,76 @@ public class XivMmoClient implements ClientModInitializer {
 							if (ClientPlayNetworking.canSend(MmoNetwork.C2SSpawnArenaBossPayload.TYPE)) {
 								ClientPlayNetworking.send(new MmoNetwork.C2SSpawnArenaBossPayload(arenaName));
 							}
+							return 1;
+						}))
+					)
+					.then(ClientCommands.literal("level")
+						.then(ClientCommands.argument("level_value", StringArgumentType.word()).executes(ctx -> {
+							try {
+								int lv = Integer.parseInt(StringArgumentType.getString(ctx, "level_value"));
+								ClientCombatPredictor pred = ClientCombatPredictor.get();
+								pred.sendLevelCommand(pred.getActiveJobId(), lv, true);
+							} catch (NumberFormatException e) {
+								ctx.getSource().sendFeedback(Component.literal("[XIVMMO] Usage: /mmo level <1..50>").withStyle(ChatFormatting.RED));
+							}
+							return 1;
+						}))
+					)
+					.then(ClientCommands.literal("exp")
+						.then(ClientCommands.argument("exp_amount", StringArgumentType.word()).executes(ctx -> {
+							try {
+								int exp = Integer.parseInt(StringArgumentType.getString(ctx, "exp_amount"));
+								ClientCombatPredictor pred = ClientCombatPredictor.get();
+								pred.sendLevelCommand(pred.getActiveJobId(), exp, false);
+							} catch (NumberFormatException e) {
+								ctx.getSource().sendFeedback(Component.literal("[XIVMMO] Usage: /mmo exp <amount>").withStyle(ChatFormatting.RED));
+							}
+							return 1;
+						}))
+					)
+					.then(ClientCommands.literal("inventory").executes(ctx -> {
+						Minecraft mc = Minecraft.getInstance();
+						mc.schedule(() -> mc.gui.setScreen(new net.xivmmo.client.screen.FfxivInventoryScreen()));
+						return 1;
+					}))
+					.then(ClientCommands.literal("character").executes(ctx -> {
+						Minecraft mc = Minecraft.getInstance();
+						mc.schedule(() -> mc.gui.setScreen(new net.xivmmo.client.screen.FfxivCharacterScreen()));
+						return 1;
+					}))
+					.then(ClientCommands.literal("actions").executes(ctx -> {
+						Minecraft mc = Minecraft.getInstance();
+						mc.schedule(() -> mc.gui.setScreen(new net.xivmmo.client.screen.FfxivActionsScreen()));
+						return 1;
+					}))
+					.then(ClientCommands.literal("chat")
+						.then(ClientCommands.literal("general").executes(ctx -> {
+							net.xivmmo.client.chat.FfxivChatManager.get().setActiveTab(net.xivmmo.chat.FfxivChatChannel.FilterTab.GENERAL);
+							return 1;
+						}))
+						.then(ClientCommands.literal("battle").executes(ctx -> {
+							net.xivmmo.client.chat.FfxivChatManager.get().setActiveTab(net.xivmmo.chat.FfxivChatChannel.FilterTab.BATTLE);
+							return 1;
+						}))
+						.then(ClientCommands.literal("event").executes(ctx -> {
+							net.xivmmo.client.chat.FfxivChatManager.get().setActiveTab(net.xivmmo.chat.FfxivChatChannel.FilterTab.EVENT);
+							return 1;
+						}))
+						.then(ClientCommands.literal("all").executes(ctx -> {
+							net.xivmmo.client.chat.FfxivChatManager.get().setActiveTab(net.xivmmo.chat.FfxivChatChannel.FilterTab.ALL);
+							return 1;
+						}))
+						.then(ClientCommands.literal("clear").executes(ctx -> {
+							net.xivmmo.client.chat.FfxivChatManager.get().clearEntries();
+							return 1;
+						}))
+						.then(ClientCommands.literal("timestamps").executes(ctx -> {
+							MmoConfig cfg = MmoConfig.get();
+							cfg.showChatTimestamps = !cfg.showChatTimestamps;
+							cfg.save();
+							ctx.getSource().sendFeedback(Component.literal(
+								"[XIVMMO] Chat Timestamps: " + (cfg.showChatTimestamps ? "ON" : "OFF")
+							).withStyle(ChatFormatting.AQUA));
 							return 1;
 						}))
 					)

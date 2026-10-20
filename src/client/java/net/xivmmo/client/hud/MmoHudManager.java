@@ -60,6 +60,26 @@ public final class MmoHudManager {
 			}
 		});
 
+		// 2b. Replace vanilla Chat HUD in MMO Mode with the persistent bottom-left FFXIV Multi-Tab Chat Log
+		HudElementRegistry.replaceElement(VanillaHudElements.CHAT, original -> (graphics, deltaTracker) -> {
+			if (MmoInputHandler.isMmoModeActive() && MmoConfig.get().useFfxivChatInMmoMode) {
+				net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+				if (!(mc.gui.screen() instanceof net.xivmmo.client.screen.FfxivChatScreen)) {
+					net.xivmmo.client.chat.FfxivChatManager.get().renderChatHud(
+						graphics,
+						mc,
+						graphics.guiWidth(),
+						graphics.guiHeight(),
+						null,
+						0,
+						false
+					);
+				}
+			} else {
+				original.extractRenderState(graphics, deltaTracker);
+			}
+		});
+
 		// 3. Reposition & scale vanilla Health, Hunger, Armor, Air, and Mount Health bars to PLAYER_VITALS widget
 		HudElementRegistry.replaceElement(VanillaHudElements.HEALTH_BAR, MmoHudManager::wrapVitalsElement);
 		HudElementRegistry.replaceElement(VanillaHudElements.FOOD_BAR, MmoHudManager::wrapVitalsElement);
@@ -72,6 +92,10 @@ public final class MmoHudManager {
 		return (graphics, deltaTracker) -> {
 			if (!MmoInputHandler.isMmoModeActive()) {
 				original.extractRenderState(graphics, deltaTracker);
+				return;
+			}
+			// When the FFXIV Parameter Bar (HP/MP/TP) is active in MMO Combat Mode, suppress vanilla heart/food icons
+			if (MmoConfig.get().useFfxivParameterBar && !MmoInputHandler.isBlockInteractionAllowed()) {
 				return;
 			}
 			int sw = graphics.guiWidth();

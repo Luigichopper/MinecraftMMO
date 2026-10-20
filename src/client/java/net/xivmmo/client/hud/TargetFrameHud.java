@@ -12,9 +12,16 @@ import net.minecraft.world.entity.monster.Enemy;
 import net.xivmmo.XivMmoMod;
 import net.xivmmo.client.combat.ClientCombatPredictor;
 import net.xivmmo.client.input.MmoInputHandler;
+import net.xivmmo.client.screen.FfxivActionsScreen;
+import net.xivmmo.client.screen.FfxivCharacterScreen;
+import net.xivmmo.client.screen.FfxivInventoryScreen;
 import net.xivmmo.client.target.ClientTargetManager;
+import net.xivmmo.combat.ability.JobDefinition;
 import net.xivmmo.config.MmoConfig;
+import net.xivmmo.data.MmoDataRegistry;
+import net.xivmmo.inventory.MmoInventoryState;
 import net.xivmmo.network.MmoNetwork;
+import net.xivmmo.progression.JobProgressionState;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -22,10 +29,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Renders the rearrangeable & scalable MMO HUD elements:
- * - {@link MmoConfig.HudWidgetId#TARGET_FRAME} (Hard Target, Target-of-Target, Soft Target, Enmity Rank & Statuses)
- * - {@link MmoConfig.HudWidgetId#FOCUS_TARGET} (Focus Target Mini-Frame)
- * - {@link MmoConfig.HudWidgetId#PARTY_LIST} (Party & Role List with HP/MP bars, Enmity pips, Statuses, Click-to-Target)
+ * Renders the FFXIV-restyled MMO HUD elements:
+ * - {@link MmoConfig.HudWidgetId#TARGET_FRAME} (FFXIV Gold-Beveled Target Bar, Target-of-Target, Soft Target, Enmity & Statuses)
+ * - {@link MmoConfig.HudWidgetId#FOCUS_TARGET} (FFXIV Focus Target Mini-Frame)
+ * - {@link MmoConfig.HudWidgetId#PARTY_LIST} ("LIGHT PARTY" List with Role Emblems, LvXX Name, side-by-side HP/MP bars & numbers)
+ * - {@link MmoConfig.HudWidgetId#PLAYER_VITALS} (FFXIV Bottom Parameter Bar: HP green, MP magenta, TP gold + Bottom Full-Width EXP Bar)
+ * - Bottom-Right Main Command Micro-Menu (Character 'C', Inventory 'I', Actions 'P', HUD 'H') + Gil + 4-Quadrant Inventory Grid Indicator
  * - {@link MmoConfig.HudWidgetId#COMBAT_TEXT} (Floating Combat Text popups)
  */
 public final class TargetFrameHud {
@@ -80,9 +89,31 @@ public final class TargetFrameHud {
 	}
 
 	/**
-	 * Allows left-clicking a row in the Party List HUD to select that party member as the player's Hard Target.
+	 * Allows left-clicking a row in the Party List HUD (or a button in the Bottom-Right Main Command Micro-Menu)
+	 * while in Free-Cursor MMO Mode.
 	 */
 	public static boolean tryClickPartyList(double guiX, double guiY, int sw, int sh) {
+		// 1. Check Bottom-Right Main Command Micro-Menu buttons (C, I, P, H)
+		int menuX = sw - 122;
+		int menuY = sh - 32;
+		if (guiY >= menuY && guiY <= menuY + 18 && guiX >= menuX && guiX <= menuX + 80) {
+			int btnIdx = (int) ((guiX - menuX) / 20.0);
+			Minecraft mc = Minecraft.getInstance();
+			switch (btnIdx) {
+				case 0 -> mc.gui.setScreen(new FfxivCharacterScreen());
+				case 1 -> mc.gui.setScreen(new FfxivInventoryScreen());
+				case 2 -> mc.gui.setScreen(new FfxivActionsScreen());
+				case 3 -> mc.gui.setScreen(new HudLayoutScreen(null));
+			}
+			return true;
+		}
+		// Clicking the 4-block inventory grid indicator also opens FfxivInventoryScreen
+		if (guiY >= menuY && guiY <= menuY + 20 && guiX > menuX + 80 && guiX <= sw - 4) {
+			Minecraft.getInstance().gui.setScreen(new FfxivInventoryScreen());
+			return true;
+		}
+
+		// 2. Check Party List rows
 		MmoHudManager.WidgetRect rect = MmoHudManager.getWidgetRect(MmoConfig.HudWidgetId.PARTY_LIST, sw, sh);
 		if (!rect.enabled() || !rect.contains(guiX, guiY)) {
 			return false;
@@ -92,10 +123,10 @@ public final class TargetFrameHud {
 			return false;
 		}
 		double localY = (guiY - rect.y()) / Math.max(0.5F, rect.scale());
-		if (localY < 14.0) {
+		if (localY < 16.0) {
 			return false;
 		}
-		int rowIdx = (int) ((localY - 14.0) / 22.0);
+		int rowIdx = (int) ((localY - 16.0) / 26.0);
 		if (rowIdx >= 0 && rowIdx < party.size()) {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.level != null) {
@@ -130,17 +161,17 @@ public final class TargetFrameHud {
 		LivingEntity targetOfTarget = tm.getTargetOfTarget();
 		LivingEntity focusTarget = tm.getFocusTarget();
 
-		// 1. TARGET_FRAME Widget (Hard Target, ToT, Soft Target, Target Statuses)
+		// 1. TARGET_FRAME Widget (FFXIV Gold-Beveled Target Frame + ToT + Soft Target + Statuses)
 		MmoHudManager.WidgetRect targetRect = MmoHudManager.getWidgetRect(
 			MmoConfig.HudWidgetId.TARGET_FRAME, screenWidth, screenHeight
 		);
 		if (targetRect.enabled()) {
 			MmoHudManager.pushWidgetTransform(graphics, targetRect);
-			int mainWidth = 196;
-			int mainHeight = 34;
+			int mainWidth = 204;
+			int mainHeight = 32;
 
 			if (hardTarget != null) {
-				drawEntityBarFrame(
+				drawFfxivTargetBar(
 					graphics,
 					mc,
 					player,
@@ -149,7 +180,7 @@ public final class TargetFrameHud {
 					0,
 					mainWidth,
 					mainHeight,
-					hardTarget instanceof Enemy ? 0xFFFF5555 : 0xFF55FF88
+					hardTarget instanceof Enemy ? 0xFFFF6666 : 0xFF66EE88
 				);
 
 				List<MmoNetwork.StatusBadge> targetStatuses = clientTargetStatuses;
@@ -163,11 +194,11 @@ public final class TargetFrameHud {
 						mc,
 						targetOfTarget,
 						mainWidth + 6,
-						4,
-						112,
+						3,
+						114,
 						24,
-						">> ToT",
-						0xFF66CCFF
+						">> ",
+						FfxivTheme.TEXT_GOLD
 					);
 				}
 			}
@@ -182,8 +213,8 @@ public final class TargetFrameHud {
 					softY,
 					mainWidth - 32,
 					22,
-					"SOFT (HOVER)",
-					0xFFFFCC44
+					"SOFT: ",
+					0xFFFFDF77
 				);
 			}
 			MmoHudManager.popWidgetTransform(graphics);
@@ -201,15 +232,15 @@ public final class TargetFrameHud {
 				focusTarget,
 				0,
 				0,
-				120,
+				126,
 				24,
-				"FOCUS",
-				0xFFD888FF
+				"FOCUS: ",
+				0xFFD99AFF
 			);
 			MmoHudManager.popWidgetTransform(graphics);
 		}
 
-		// 3. PARTY_LIST Widget (Role-colored Party Frame)
+		// 3. PARTY_LIST Widget ("LIGHT PARTY" Frame)
 		MmoHudManager.WidgetRect partyRect = MmoHudManager.getWidgetRect(
 			MmoConfig.HudWidgetId.PARTY_LIST, screenWidth, screenHeight
 		);
@@ -219,7 +250,20 @@ public final class TargetFrameHud {
 			MmoHudManager.popWidgetTransform(graphics);
 		}
 
-		// 4. COMBAT_TEXT Widget (Floating Combat Text popups)
+		// 4. PLAYER_VITALS Widget (FFXIV Bottom Parameter Bar: HP / MP / TP) + Full-Width Bottom EXP Bar
+		if (MmoConfig.get().useFfxivParameterBar && !MmoInputHandler.isBlockInteractionAllowed()) {
+			MmoHudManager.WidgetRect vitalsRect = MmoHudManager.getWidgetRect(
+				MmoConfig.HudWidgetId.PLAYER_VITALS, screenWidth, screenHeight
+			);
+			if (vitalsRect.enabled()) {
+				MmoHudManager.pushWidgetTransform(graphics, vitalsRect);
+				renderFfxivParameterBar(graphics, mc, player);
+				MmoHudManager.popWidgetTransform(graphics);
+			}
+			renderBottomExpAndMicroMenu(graphics, mc, screenWidth, screenHeight);
+		}
+
+		// 5. COMBAT_TEXT Widget (Floating Combat Text popups)
 		MmoHudManager.WidgetRect fctRect = MmoHudManager.getWidgetRect(
 			MmoConfig.HudWidgetId.COMBAT_TEXT, screenWidth, screenHeight
 		);
@@ -229,11 +273,151 @@ public final class TargetFrameHud {
 			MmoHudManager.popWidgetTransform(graphics);
 		}
 
-		// 5. Milestone 9 Diagnostic & Custom F3 Debug Overlay
+		// 6. Milestone 9 Diagnostic & Custom F3 Debug Overlay
 		boolean f3Open = mc.gui.hud.getDebugOverlay().showDebugScreen();
 		if (net.xivmmo.debug.MmoDebugState.isDebugOverlayEnabled() || f3Open) {
 			renderDebugAndF3Overlay(graphics, mc, player, screenWidth, f3Open);
 		}
+	}
+
+	/**
+	 * Renders the FFXIV Bottom Parameter Bar (HP green bar, MP magenta bar, TP gold bar with crisp numbers below)
+	 * matching Screenshot #3.
+	 */
+	private static void renderFfxivParameterBar(GuiGraphicsExtractor graphics, Minecraft mc, LocalPlayer player) {
+		ClientCombatPredictor predictor = ClientCombatPredictor.get();
+		int jobLv = predictor.getActiveJobLevel();
+		JobProgressionState.JobAttributes attrs = JobProgressionState.computeAttributes(
+			predictor.getActiveJobId(),
+			jobLv,
+			player.getArmorValue(),
+			2
+		);
+
+		float rawHp = Math.max(0.0F, player.getHealth());
+		float rawMaxHp = Math.max(1.0F, player.getMaxHealth());
+		float hpRatio = Mth.clamp(rawHp / rawMaxHp, 0.0F, 1.0F);
+		int ffxivMaxHp = attrs.displayMaxHp();
+		int ffxivCurHp = Math.round(ffxivMaxHp * hpRatio);
+
+		int curMp = predictor.getPredictedState().getMana();
+		int maxMp = Math.max(1, predictor.getPredictedState().getMaxMana());
+		float mpRatio = Mth.clamp((float) curMp / maxMp, 0.0F, 1.0F);
+
+		float foodRatio = Mth.clamp(player.getFoodData().getFoodLevel() / 20.0F, 0.0F, 1.0F);
+		int curTp = Math.round(1000.0F * foodRatio);
+
+		int barW = 76;
+		int gap = 8;
+		int barH = 5;
+
+		// 1. HP Gauge (Green)
+		int hpX = 0;
+		FfxivTheme.drawGaugeBar(graphics, hpX, 4, barW, barH, hpRatio, FfxivTheme.HP_BAR_FILL, FfxivTheme.HP_BAR_TOP);
+		graphics.text(mc.font, "HP", hpX, 11, FfxivTheme.TEXT_GOLD, true);
+		String hpNum = Integer.toString(ffxivCurHp);
+		graphics.text(mc.font, hpNum, hpX + barW - mc.font.width(hpNum), 11, FfxivTheme.TEXT_HP_GREEN, true);
+
+		// 2. MP Gauge (Magenta)
+		int mpX = hpX + barW + gap;
+		FfxivTheme.drawGaugeBar(graphics, mpX, 4, barW, barH, mpRatio, FfxivTheme.MP_BAR_FILL, FfxivTheme.MP_BAR_TOP);
+		graphics.text(mc.font, "MP", mpX, 11, FfxivTheme.TEXT_GOLD, true);
+		String mpNum = Integer.toString(curMp);
+		graphics.text(mc.font, mpNum, mpX + barW - mc.font.width(mpNum), 11, FfxivTheme.TEXT_MP_MAGENTA, true);
+
+		// 3. TP Gauge (Gold)
+		int tpX = mpX + barW + gap;
+		FfxivTheme.drawGaugeBar(graphics, tpX, 4, barW, barH, foodRatio, FfxivTheme.TP_BAR_FILL, FfxivTheme.TP_BAR_TOP);
+		graphics.text(mc.font, "TP", tpX, 11, FfxivTheme.TEXT_GOLD, true);
+		String tpNum = Integer.toString(curTp);
+		graphics.text(mc.font, tpNum, tpX + barW - mc.font.width(tpNum), 11, FfxivTheme.TEXT_TP_GOLD, true);
+	}
+
+	/**
+	 * Renders the full-width bottom FFXIV Experience Bar ("Lv XX EXP XXXXX/YYYYY") and the
+	 * Bottom-Right Main Command Micro-Menu + Gil + 4-Quadrant Inventory Grid Indicator.
+	 */
+	private static void renderBottomExpAndMicroMenu(
+		GuiGraphicsExtractor graphics,
+		Minecraft mc,
+		int sw,
+		int sh
+	) {
+		ClientCombatPredictor predictor = ClientCombatPredictor.get();
+		Identifier jobId = predictor.getActiveJobId();
+		JobProgressionState.JobLevelEntry prog = predictor.getJobProgress(jobId);
+
+		// 1. Full-Width Bottom EXP Bar
+		int expW = Math.min(340, sw - 160);
+		int expX = (sw - expW) / 2;
+		int expY = sh - 6;
+		float expRatio = prog.nextLevelExp() > 0
+			? Mth.clamp((float) prog.currentExp() / prog.nextLevelExp(), 0.0F, 1.0F)
+			: 1.0F;
+
+		FfxivTheme.drawGaugeBar(graphics, expX, expY, expW, 4, expRatio, FfxivTheme.EXP_BAR_FILL, 0xFFFFF4AA);
+		// 10% tick dividers along the EXP bar
+		for (int i = 1; i < 10; i++) {
+			int tx = expX + (expW * i) / 10;
+			graphics.fill(tx, expY, tx + 1, expY + 4, 0x88000000);
+		}
+
+		String jobAbbr = FfxivTheme.getJobAbbreviation(jobId);
+		String bonusStr = predictor.getClientArmouryBonusPercent() > 0
+			? "  (+" + predictor.getClientArmouryBonusPercent() + "% Armoury)"
+			: "";
+		String expLabel = String.format(
+			Locale.ROOT,
+			"Lv %d %s   EXP %,d / %,d%s",
+			prog.level(),
+			jobAbbr,
+			prog.currentExp(),
+			prog.nextLevelExp(),
+			bonusStr
+		);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(expX + 2.0F, expY - 7.0F);
+		graphics.pose().scale(0.75F, 0.75F);
+		graphics.text(mc.font, expLabel, 0, 0, FfxivTheme.TEXT_CREAM, true);
+		graphics.pose().popMatrix();
+
+		// 2. Bottom-Right Main Command Micro-Menu (C, I, P, H) + Gil + 4-Block Inventory Grid
+		int menuX = sw - 122;
+		int menuY = sh - 32;
+		String[] btnLabels = {"C", "I", "P", "H"};
+		int[] btnColors = {0xFFD9BE7E, 0xFF88CCFF, 0xFFFF99CC, 0xFF99EEAA};
+		for (int i = 0; i < 4; i++) {
+			int bx = menuX + i * 20;
+			graphics.fill(bx, menuY, bx + 17, menuY + 16, 0xEE1A1C24);
+			graphics.outline(bx, menuY, 17, 16, FfxivTheme.GOLD_OUTER);
+			graphics.centeredText(mc.font, btnLabels[i], bx + 8, menuY + 4, btnColors[i]);
+		}
+
+		// 4-Quadrant Inventory Grid Indicator (right of micro-menu)
+		int gridX = menuX + 83;
+		int gridY = menuY;
+		graphics.fill(gridX - 2, gridY, gridX + 35, gridY + 16, 0xEE161820);
+		graphics.outline(gridX - 2, gridY, 37, 16, FfxivTheme.GOLD_OUTER);
+		for (int q = 0; q < 4; q++) {
+			int qx = gridX + q * 8;
+			int usedInQuad = 0;
+			for (int s = q * 35; s < (q + 1) * 35; s++) {
+				if (!predictor.getClientInventorySlot(s).isEmpty()) {
+					usedInQuad++;
+				}
+			}
+			int dotColor = usedInQuad >= 35 ? 0xFFFF5555 : (usedInQuad > 0 ? 0xFF66DDFF : 0xFF333846);
+			graphics.fill(qx, gridY + 3, qx + 6, gridY + 13, dotColor);
+			graphics.outline(qx, gridY + 3, 6, 10, 0xFF0E1015);
+		}
+
+		// Gil readout below micro-menu
+		String gilText = String.format(Locale.ROOT, "%,d Gil", predictor.getClientGil());
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(sw - 6.0F - mc.font.width(gilText) * 0.75F, sh - 12.0F);
+		graphics.pose().scale(0.75F, 0.75F);
+		graphics.text(mc.font, gilText, 0, 0, FfxivTheme.TEXT_GOLD, true);
+		graphics.pose().popMatrix();
 	}
 
 	public static int getClientEnmityRank() {
@@ -252,25 +436,29 @@ public final class TargetFrameHud {
 		List<MmoNetwork.PartyMemberEntry> members = clientPartyMembers;
 		int w = MmoConfig.HudWidgetId.PARTY_LIST.baseWidth();
 
-		graphics.fill(0, 0, w, 12, 0xC8101420);
-		graphics.fill(0, 0, w, 1, 0xFF4A78B8);
-		String title = "PARTY (" + Math.max(1, members.size()) + ") [" + clientActiveJobId.getPath().toUpperCase(Locale.ROOT) + "]";
-		graphics.text(mc.font, title, 4, 2, 0xFFAACCEE, true);
+		// FFXIV "LIGHT PARTY" Gold Header + Horizontal Rule
+		String header = members.size() > 4 ? "FULL PARTY" : "LIGHT PARTY";
+		graphics.text(mc.font, header, 2, 1, FfxivTheme.TEXT_GOLD, true);
+		graphics.fill(0, 11, w, 12, FfxivTheme.GOLD_RULE);
+		graphics.fill(0, 12, w, 13, 0x88000000);
 
 		if (members.isEmpty()) {
-			// Fallback solo entry before first 10-tick server sync
+			ClientCombatPredictor pred = ClientCombatPredictor.get();
+			JobDefinition job = MmoDataRegistry.getJob(pred.getActiveJobId());
+			String role = job != null ? job.role().getSerializedName() : "tank";
 			drawPartyRow(
 				graphics, mc,
 				localPlayer.getName().getString(),
-				"tank",
+				role,
+				pred.getActiveJobLevel(),
 				localPlayer.getHealth(),
 				localPlayer.getMaxHealth(),
-				ClientCombatPredictor.get().getPredictedState().getMana(),
-				ClientCombatPredictor.get().getPredictedState().getMaxMana(),
+				pred.getPredictedState().getMana(),
+				pred.getPredictedState().getMaxMana(),
 				clientEnmityRank,
 				"",
 				0,
-				14,
+				16,
 				w
 			);
 			return;
@@ -282,6 +470,7 @@ public final class TargetFrameHud {
 				graphics, mc,
 				m.name(),
 				m.role(),
+				m.level(),
 				m.hp(),
 				m.maxHp(),
 				m.mana(),
@@ -289,7 +478,7 @@ public final class TargetFrameHud {
 				m.enmityRank(),
 				m.topStatus(),
 				0,
-				14 + i * 22,
+				16 + i * 26,
 				w
 			);
 		}
@@ -300,6 +489,7 @@ public final class TargetFrameHud {
 		Minecraft mc,
 		String name,
 		String role,
+		int level,
 		float hp,
 		float maxHp,
 		int mana,
@@ -310,41 +500,55 @@ public final class TargetFrameHud {
 		int y,
 		int w
 	) {
-		int roleColor = switch (role.toLowerCase(Locale.ROOT)) {
-			case "tank" -> 0xFF4488FF;
-			case "healer" -> 0xFF44DD66;
-			default -> 0xFFEE4444;
-		};
-		String roleTag = switch (role.toLowerCase(Locale.ROOT)) {
-			case "tank" -> "T";
-			case "healer" -> "H";
-			case "melee_dps" -> "M";
-			default -> "R";
-		};
+		graphics.fill(x, y, x + w, y + 24, 0xCC141720);
+		graphics.outline(x, y, w, 24, 0xFF323644);
 
-		graphics.fill(x, y, x + w, y + 20, 0xB010141E);
-		graphics.fill(x, y, x + 10, y + 20, roleColor);
-		graphics.centeredText(mc.font, roleTag, x + 5, y + 6, 0xFFFFFFFF);
+		// Left Role Emblem (Tank Shield / Healer Cross / DPS Blade)
+		FfxivTheme.drawRoleEmblem(graphics, x + 2, y + 2, role);
 
+		// "LvXX PlayerName" + Enmity Rank Badge
 		String enmPrefix = enmityRank == 1 ? "[A] " : (enmityRank > 1 ? "[" + enmityRank + "] " : "");
-		String display = enmPrefix + (name.length() > 10 ? name.substring(0, 10) : name);
-		graphics.text(mc.font, display, x + 13, y + 2, enmityRank == 1 ? 0xFFFF6666 : 0xFFE8F0FF, true);
+		String shortName = name.length() > 11 ? name.substring(0, 11) : name;
+		String title = "Lv" + Math.max(1, level) + " " + enmPrefix + shortName;
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(x + 16.0F, y + 2.0F);
+		graphics.pose().scale(0.80F, 0.80F);
+		graphics.text(mc.font, title, 0, 0, enmityRank == 1 ? 0xFFFF7777 : FfxivTheme.TEXT_CREAM, true);
+		graphics.pose().popMatrix();
 
 		if (topStatus != null && !topStatus.isEmpty()) {
 			String stShort = topStatus.substring(0, Math.min(4, topStatus.length()));
-			graphics.text(mc.font, stShort, x + w - mc.font.width(stShort) - 3, y + 2, 0xFF66FFAA, true);
+			graphics.pose().pushMatrix();
+			graphics.pose().translate(x + w - 22.0F, y + 2.0F);
+			graphics.pose().scale(0.75F, 0.75F);
+			graphics.text(mc.font, stShort, 0, 0, 0xFF77FFAA, true);
+			graphics.pose().popMatrix();
 		}
 
+		// Side-by-side HP (Green) and MP (Magenta) bars + numeric readouts below (matching FFXIV Party List)
 		float hpRatio = Mth.clamp(hp / Math.max(1.0F, maxHp), 0.0F, 1.0F);
 		float mpRatio = Mth.clamp((float) mana / Math.max(1, maxMana), 0.0F, 1.0F);
 
-		int barX = x + 13;
-		int barW = w - 16;
-		graphics.fill(barX, y + 12, barX + barW, y + 15, 0xFF1E222D);
-		graphics.fill(barX, y + 12, barX + (int) (barW * hpRatio), y + 15, 0xFF44CC66);
+		int hpBarX = x + 16;
+		int hpBarW = 72;
+		int mpBarX = hpBarX + hpBarW + 6;
+		int mpBarW = w - (mpBarX - x) - 4;
 
-		graphics.fill(barX, y + 16, barX + barW, y + 18, 0xFF1E222D);
-		graphics.fill(barX, y + 16, barX + (int) (barW * mpRatio), y + 18, 0xFF55AAFF);
+		FfxivTheme.drawGaugeBar(graphics, hpBarX, y + 11, hpBarW, 4, hpRatio, FfxivTheme.HP_BAR_FILL, FfxivTheme.HP_BAR_TOP);
+		FfxivTheme.drawGaugeBar(graphics, mpBarX, y + 11, mpBarW, 4, mpRatio, FfxivTheme.MP_BAR_FILL, FfxivTheme.MP_BAR_TOP);
+
+		int scaledHp = Math.round(hp * 25.0F + level * 15.0F);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(hpBarX, y + 17.0F);
+		graphics.pose().scale(0.65F, 0.65F);
+		graphics.text(mc.font, "HP " + scaledHp, 0, 0, FfxivTheme.TEXT_HP_GREEN, true);
+		graphics.pose().popMatrix();
+
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(mpBarX, y + 17.0F);
+		graphics.pose().scale(0.65F, 0.65F);
+		graphics.text(mc.font, "MP " + mana, 0, 0, FfxivTheme.TEXT_MP_MAGENTA, true);
+		graphics.pose().popMatrix();
 	}
 
 	private static void renderFloatingCombatText(GuiGraphicsExtractor graphics, Minecraft mc) {
@@ -371,7 +575,7 @@ public final class TargetFrameHud {
 		}
 	}
 
-	private static void drawEntityBarFrame(
+	private static void drawFfxivTargetBar(
 		GuiGraphicsExtractor graphics,
 		Minecraft mc,
 		LocalPlayer player,
@@ -388,39 +592,37 @@ public final class TargetFrameHud {
 		double dist = player.distanceTo(target);
 		boolean hasLos = player.hasLineOfSight(target);
 
-		graphics.fill(x, y, x + width, y + height, 0xB810141E);
-		graphics.fill(x, y, x + width, y + 2, accentColor);
-		graphics.fill(x, y + height - 1, x + width, y + height, 0x80303848);
+		graphics.fill(x, y, x + width, y + height, 0xCC161820);
+		graphics.outline(x, y, width, height, FfxivTheme.GOLD_RULE);
+		graphics.fill(x + 1, y + 1, x + width - 1, y + 2, FfxivTheme.GOLD_BRIGHT);
 
-		String nameText = target.getName().getString();
+		int estLevel = target.getMaxHealth() >= 80.0F ? 50 : Math.clamp(Math.round(target.getMaxHealth() * 1.5F), 1, 50);
+		String nameText = "Lv" + estLevel + "  " + target.getName().getString();
 		String enmStr = clientEnmityRank > 0
 			? String.format(Locale.ROOT, "[#%d %.0f%%] ", clientEnmityRank, clientEnmityRatio * 100.0F)
 			: "";
 		String rightInfo = enmStr + String.format(Locale.ROOT, "%.1fm%s", dist, hasLos ? "" : " [!LOS]");
-		int rightColor = !hasLos ? 0xFFFF6666 : (clientEnmityRank == 1 ? 0xFFFF5555 : 0xFFA8C0D8);
+		int rightColor = !hasLos ? 0xFFFF6666 : (clientEnmityRank == 1 ? 0xFFFF7777 : FfxivTheme.TEXT_SILVER);
 
-		graphics.text(mc.font, nameText, x + 6, y + 5, 0xFFFFFFFF, true);
-		graphics.text(
-			mc.font,
-			rightInfo,
-			x + width - mc.font.width(rightInfo) - 6,
-			y + 5,
-			rightColor,
-			true
-		);
+		graphics.text(mc.font, nameText, x + 6, y + 5, FfxivTheme.TEXT_GOLD, true);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(x + width - 6.0F - mc.font.width(rightInfo) * 0.80F, y + 6.0F);
+		graphics.pose().scale(0.80F, 0.80F);
+		graphics.text(mc.font, rightInfo, 0, 0, rightColor, true);
+		graphics.pose().popMatrix();
 
 		int barX = x + 6;
 		int barY = y + 18;
 		int barW = width - 12;
-		int barH = 10;
-		graphics.fill(barX, barY, barX + barW, barY + barH, 0xFF1E222D);
-		int fillW = (int) (barW * hpRatio);
-		if (fillW > 0) {
-			graphics.fill(barX, barY, barX + fillW, barY + barH, accentColor);
-		}
+		int barH = 7;
+		FfxivTheme.drawGaugeBar(graphics, barX, barY, barW, barH, hpRatio, accentColor, 0xFFFFB8B8);
 
-		String hpString = String.format(Locale.ROOT, "%.0f / %.0f (%.0f%%)", hp, maxHp, hpRatio * 100.0F);
-		graphics.centeredText(mc.font, hpString, x + width / 2, barY + 1, 0xFFFFFFFF);
+		String hpPct = String.format(Locale.ROOT, "%.0f%%", hpRatio * 100.0F);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(x + width / 2.0F - 8.0F, barY + 1.0F);
+		graphics.pose().scale(0.75F, 0.75F);
+		graphics.text(mc.font, hpPct, 0, 0, FfxivTheme.TEXT_CREAM, true);
+		graphics.pose().popMatrix();
 	}
 
 	private static void drawCompactFrame(
@@ -438,21 +640,21 @@ public final class TargetFrameHud {
 		float maxHp = Math.max(1.0F, entity.getMaxHealth());
 		float hpRatio = Mth.clamp(hp / maxHp, 0.0F, 1.0F);
 
-		graphics.fill(x, y, x + width, y + height, 0xA810141E);
-		graphics.fill(x, y, x + width, y + 1, accentColor);
+		graphics.fill(x, y, x + width, y + height, 0xCC161820);
+		graphics.outline(x, y, width, height, FfxivTheme.GOLD_OUTER);
 
-		String label = prefix + ": " + entity.getName().getString();
-		graphics.text(mc.font, label, x + 4, y + 3, accentColor, true);
+		String label = prefix + entity.getName().getString();
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(x + 4.0F, y + 3.0F);
+		graphics.pose().scale(0.80F, 0.80F);
+		graphics.text(mc.font, label, 0, 0, accentColor, true);
+		graphics.pose().popMatrix();
 
 		int barX = x + 4;
 		int barY = y + 14;
 		int barW = width - 8;
-		int barH = 6;
-		graphics.fill(barX, barY, barX + barW, barY + barH, 0xFF1E222D);
-		int fillW = (int) (barW * hpRatio);
-		if (fillW > 0) {
-			graphics.fill(barX, barY, barX + fillW, barY + barH, accentColor);
-		}
+		int barH = 5;
+		FfxivTheme.drawGaugeBar(graphics, barX, barY, barW, barH, hpRatio, accentColor, 0xFFFFFFFF);
 	}
 
 	public static void drawStatusRow(
@@ -468,9 +670,10 @@ public final class TargetFrameHud {
 			String txt = b.displayName() + " " + b.remainingSeconds() + "s";
 			int w = mc.font.width(txt) + 6;
 			int h = 13;
-			int topColor = b.buff() ? 0xFF44DD88 : 0xFFFF6655;
-			graphics.fill(curX, y, curX + w, y + h, 0xC0121622);
-			graphics.fill(curX, y, curX + w, y + 1, topColor);
+			int topColor = b.buff() ? 0xFF55EE99 : 0xFFFF6655;
+			graphics.fill(curX, y, curX + w, y + h, 0xD8161820);
+			graphics.outline(curX, y, w, h, FfxivTheme.GOLD_OUTER);
+			graphics.fill(curX + 1, y + 1, curX + w - 1, y + 2, topColor);
 			graphics.text(mc.font, txt, curX + 3, y + 3, topColor, true);
 			curX += w + 4;
 		}
@@ -483,7 +686,8 @@ public final class TargetFrameHud {
 		int screenWidth,
 		boolean f3Open
 	) {
-		var state = ClientCombatPredictor.get().getPredictedState();
+		var predictor = ClientCombatPredictor.get();
+		var state = predictor.getPredictedState();
 		var tm = ClientTargetManager.get();
 		var ray = net.xivmmo.client.target.CursorRaycaster.get();
 
@@ -497,11 +701,13 @@ public final class TargetFrameHud {
 		List<String> lines = new ArrayList<>(12);
 		lines.add(String.format(
 			Locale.ROOT,
-			"[XIVMMO DEBUG%s] Job: %s | HotbarLock: %s (Slot %d)",
+			"[XIVMMO DEBUG%s] Job: %s (Lv.%d) | Gil: %d | Bag: %d/%d",
 			f3Open ? " + F3" : "",
 			clientActiveJobId.getPath(),
-			MmoHudManager.shouldDisableVanillaHotbarMechanics() ? "LOCKED" : "UNLOCKED",
-			player.getInventory().getSelectedSlot()
+			predictor.getActiveJobLevel(),
+			predictor.getClientGil(),
+			predictor.getUsedMainInventoryCount(),
+			MmoInventoryState.TOTAL_MAIN_SLOTS
 		));
 		lines.add(String.format(
 			Locale.ROOT,
@@ -557,10 +763,10 @@ public final class TargetFrameHud {
 		int boxY = f3Open ? 64 : 6;
 
 		graphics.fill(boxX, boxY, boxX + boxW, boxY + boxH, 0xB80A101C);
-		graphics.outline(boxX, boxY, boxW, boxH, 0xFF44CCFF);
+		graphics.outline(boxX, boxY, boxW, boxH, FfxivTheme.GOLD_RULE);
 
 		for (int i = 0; i < lines.size(); i++) {
-			int color = i == 0 ? 0xFF55EEFF : 0xFFD8E8F8;
+			int color = i == 0 ? FfxivTheme.TEXT_GOLD : FfxivTheme.TEXT_CREAM;
 			graphics.text(mc.font, lines.get(i), boxX + 5, boxY + 4 + i * 10, color, true);
 		}
 	}

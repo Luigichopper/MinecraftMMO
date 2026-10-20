@@ -14,6 +14,11 @@
   "disableVanillaHotbarMechanicsInMmoMode": true,
   "hideVanillaCrosshairInMmoMode": true,
   "showMmoActionHotbar": true,
+  "useFfxivParameterBar": true,
+  "replaceVanillaInventoryInMmoMode": true,
+  "hotbarLocked": false,
+  "useFfxivChatInMmoMode": true,
+  "showChatTimestamps": false,
   "armorMitigationScale": 0.5,
   "hudLayout": {
     "TARGET_FRAME": {
@@ -30,31 +35,37 @@
     },
     "CAST_BAR": {
       "normX": 0.5,
-      "normY": 0.69,
+      "normY": 0.68,
       "scale": 1.0,
       "enabled": true
     },
     "PLAYER_VITALS": {
       "normX": 0.5,
-      "normY": 0.78,
+      "normY": 0.77,
       "scale": 1.0,
       "enabled": true
     },
     "ACTION_HOTBAR": {
       "normX": 0.5,
-      "normY": 0.87,
+      "normY": 0.85,
       "scale": 1.0,
       "enabled": true
     },
     "PARTY_LIST": {
-      "normX": 0.08,
-      "normY": 0.28,
+      "normX": 0.09,
+      "normY": 0.24,
       "scale": 1.0,
       "enabled": true
     },
     "COMBAT_TEXT": {
       "normX": 0.56,
       "normY": 0.42,
+      "scale": 1.0,
+      "enabled": true
+    },
+    "CHAT_LOG": {
+      "normX": 0.16,
+      "normY": 0.67,
       "scale": 1.0,
       "enabled": true
     }

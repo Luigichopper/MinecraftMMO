@@ -1,0 +1,22 @@
+{
+  "id": "xivmmo:second_wind",
+  "display_name": "Second Wind",
+  "category": "ogcd",
+  "target_type": "self",
+  "aoe_shape": "none",
+  "range": 0.0,
+  "radius": 0.0,
+  "inner_radius": 0.0,
+  "cone_angle_degrees": 90.0,
+  "cast_ticks": 0,
+  "recast_ticks": 600,
+  "cooldown_group": "xivmmo:second_wind",
+  "max_charges": 1,
+  "animation_lock_ticks": 12,
+  "mana_cost": 0,
+  "potency": 450,
+  "combo_potency": 0,
+  "positional": "none",
+  "positional_potency": 0,
+  "can_move_while_casting": true
+}

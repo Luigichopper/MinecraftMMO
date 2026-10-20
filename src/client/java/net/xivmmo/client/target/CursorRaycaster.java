@@ -28,7 +28,7 @@ import java.util.List;
  */
 public final class CursorRaycaster {
 	public static final double DEFAULT_MAX_TARGET_RANGE = 30.0;
-	public static final double ENTITY_PICK_INFLATION = 0.20;
+	public static final double ENTITY_PICK_INFLATION = 0.35;
 
 	private static final CursorRaycaster INSTANCE = new CursorRaycaster();
 
@@ -87,10 +87,18 @@ public final class CursorRaycaster {
 		float ndcY = 1.0F - (2.0F * cursorY / screenHeight);
 
 		invScratch.set(viewRotProj).invert();
-		invScratch.transformProject(ndcX, ndcY, 0.0F, nearScratch);
-		invScratch.transformProject(ndcX, ndcY, 1.0F, farScratch);
+		invScratch.transformProject(ndcX, ndcY, 0.25F, nearScratch);
+		invScratch.transformProject(ndcX, ndcY, 0.75F, farScratch);
 
-		outDir.set(farScratch).sub(nearScratch);
+		// Support both Standard-Z (near at smaller ndcZ, far at larger ndcZ) and
+		// Minecraft 26.2 Reverse-Z (near at larger ndcZ, far at smaller ndcZ):
+		// Because viewRotation is an orthogonal rotation around the camera origin (0, 0, 0),
+		// the unprojected point closer to the far plane always has a larger squared distance from the origin.
+		if (nearScratch.lengthSquared() > farScratch.lengthSquared()) {
+			outDir.set(nearScratch).sub(farScratch);
+		} else {
+			outDir.set(farScratch).sub(nearScratch);
+		}
 		if (outDir.lengthSquared() < 1.0E-12F) {
 			return outDir.set(0.0F, 0.0F, -1.0F);
 		}
@@ -238,18 +246,23 @@ public final class CursorRaycaster {
 		}
 
 		Window window = mc.getWindow();
+		float screenW = (float) window.getScreenWidth();
+		float screenH = (float) window.getScreenHeight();
 		camera.getViewRotationProjectionMatrix(this.scratchViewRotProj);
 		unprojectToRayDirection(
 			this.scratchViewRotProj,
 			(float) cursorX,
 			(float) cursorY,
-			(float) window.getScreenWidth(),
-			(float) window.getScreenHeight(),
+			screenW,
+			screenH,
 			this.scratchInvViewRotProj,
 			this.scratchNearPoint,
 			this.scratchFarPoint,
 			this.scratchRayDir
 		);
+		if (this.scratchRayDir.dot(camera.forwardVector()) <= 0.0F) {
+			this.scratchRayDir.negate();
+		}
 
 		Vec3 rayOrigin = camera.position();
 		Vec3 rayDir = new Vec3(this.scratchRayDir.x, this.scratchRayDir.y, this.scratchRayDir.z);
@@ -279,16 +292,18 @@ public final class CursorRaycaster {
 			this.cachedGroundHitPos = null;
 		}
 
-		// 2. Entity ray-vs-AABB intersection within unoccluded ray distance and player max range
-		AABB searchBox = new AABB(rayOrigin, rayOrigin.add(rayDir.scale(maxUnoccludedRayDist))).inflate(1.5);
+		// 2. Entity ray-vs-AABB intersection within unoccluded ray distance and player max range.
+		// Allow a small margin (+0.65m) past the ground hit so clicking near a mob's feet/ring on the floor is never occluded by the floor itself.
+		double maxEntityRayDist = Math.min(maxRayDist, maxUnoccludedRayDist + 0.65);
+		AABB searchBox = new AABB(rayOrigin, rayOrigin.add(rayDir.scale(maxEntityRayDist))).inflate(1.5);
 		List<LivingEntity> candidates = level.getEntitiesOfClass(
 			LivingEntity.class,
 			searchBox,
-			entity -> entity != player && entity.isAlive() && entity.isPickable() && !entity.isSpectator()
+			entity -> entity != player && entity.isAlive() && !entity.isSpectator()
 		);
 
 		LivingEntity closestEntity = null;
-		double closestRayT = maxUnoccludedRayDist;
+		double closestRayT = maxEntityRayDist;
 		double maxRangeSqr = maxPlayerRange * maxPlayerRange;
 
 		for (int i = 0, size = candidates.size(); i < size; i++) {
@@ -306,11 +321,8 @@ public final class CursorRaycaster {
 				closestRayT
 			);
 			if (t >= 0.0 && t < closestRayT) {
-				// Respect line of sight from either player eyes or camera
-				if (player.hasLineOfSight(candidate)) {
-					closestRayT = t;
-					closestEntity = candidate;
-				}
+				closestRayT = t;
+				closestEntity = candidate;
 			}
 		}
 

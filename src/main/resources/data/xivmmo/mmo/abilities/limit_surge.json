@@ -1,0 +1,22 @@
+{
+  "id": "xivmmo:limit_surge",
+  "display_name": "Limit Break: Starbreaker",
+  "category": "gcd",
+  "target_type": "self_aoe",
+  "aoe_shape": "circle",
+  "range": 0.0,
+  "radius": 8.0,
+  "inner_radius": 0.0,
+  "cone_angle_degrees": 360.0,
+  "cast_ticks": 30,
+  "recast_ticks": 1200,
+  "cooldown_group": "xivmmo:limit_surge",
+  "max_charges": 1,
+  "animation_lock_ticks": 16,
+  "mana_cost": 0,
+  "potency": 650,
+  "combo_potency": 0,
+  "positional": "none",
+  "positional_potency": 0,
+  "can_move_while_casting": false
+}

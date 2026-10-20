@@ -2,19 +2,22 @@ package net.xivmmo.network;
 
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
 import net.xivmmo.XivMmoMod;
 import net.xivmmo.combat.ability.AbilityDefinition;
 import net.xivmmo.combat.telegraph.TelegraphShapes;
+import net.xivmmo.progression.JobProgressionState;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Defines and registers all C2S and S2C networking payloads for targeting, ability execution,
- * status/enmity HUD synchronization, and world telegraphs.
+ * status/enmity HUD synchronization, world telegraphs, FFXIV Job progression, and the 140-slot FFXIV Inventory.
  */
 public final class MmoNetwork {
 	private static boolean registered = false;
@@ -33,6 +36,9 @@ public final class MmoNetwork {
 		PayloadTypeRegistry.serverboundPlay().register(C2SSpawnTestTelegraphPayload.TYPE, C2SSpawnTestTelegraphPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(C2SSelectJobPayload.TYPE, C2SSelectJobPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(C2SSpawnArenaBossPayload.TYPE, C2SSpawnArenaBossPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(C2SInventoryActionPayload.TYPE, C2SInventoryActionPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(C2SLevelCommandPayload.TYPE, C2SLevelCommandPayload.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(C2SChatChannelPayload.TYPE, C2SChatChannelPayload.CODEC);
 
 		PayloadTypeRegistry.clientboundPlay().register(S2CAbilityResponsePayload.TYPE, S2CAbilityResponsePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(S2CCastStatusPayload.TYPE, S2CCastStatusPayload.CODEC);
@@ -41,6 +47,9 @@ public final class MmoNetwork {
 		PayloadTypeRegistry.clientboundPlay().register(S2CCombatHudSyncPayload.TYPE, S2CCombatHudSyncPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(S2CCombatTextPayload.TYPE, S2CCombatTextPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(S2CPartySyncPayload.TYPE, S2CPartySyncPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(S2CProgressionSyncPayload.TYPE, S2CProgressionSyncPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(S2CInventorySyncPayload.TYPE, S2CInventorySyncPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(S2CChatChannelPayload.TYPE, S2CChatChannelPayload.CODEC);
 	}
 
 	public record C2SSetTargetPayload(int hardTargetEntityId, int focusTargetEntityId) implements CustomPacketPayload {
@@ -389,6 +398,7 @@ public final class MmoNetwork {
 		String name,
 		Identifier jobId,
 		String role,
+		int level,
 		float hp,
 		float maxHp,
 		int mana,
@@ -402,6 +412,7 @@ public final class MmoNetwork {
 				buf.writeUtf(m.name());
 				buf.writeIdentifier(m.jobId());
 				buf.writeUtf(m.role());
+				buf.writeVarInt(m.level());
 				buf.writeFloat(m.hp());
 				buf.writeFloat(m.maxHp());
 				buf.writeVarInt(m.mana());
@@ -414,6 +425,7 @@ public final class MmoNetwork {
 				buf.readUtf(),
 				buf.readIdentifier(),
 				buf.readUtf(),
+				buf.readVarInt(),
 				buf.readFloat(),
 				buf.readFloat(),
 				buf.readVarInt(),
@@ -449,6 +461,186 @@ public final class MmoNetwork {
 				}
 				return new S2CPartySyncPayload(jobId, list);
 			}
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public record S2CProgressionSyncPayload(
+		Identifier activeJobId,
+		List<JobProgressionState.JobLevelEntry> jobs,
+		int armouryBonusPercent,
+		long gil
+	) implements CustomPacketPayload {
+		public static final Type<S2CProgressionSyncPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "s2c_progression_sync")
+		);
+
+		public static final StreamCodec<FriendlyByteBuf, S2CProgressionSyncPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				buf.writeIdentifier(p.activeJobId());
+				buf.writeVarInt(p.jobs().size());
+				for (JobProgressionState.JobLevelEntry e : p.jobs()) {
+					JobProgressionState.JobLevelEntry.STREAM_CODEC.encode(buf, e);
+				}
+				buf.writeVarInt(p.armouryBonusPercent());
+				buf.writeVarLong(p.gil());
+			},
+			buf -> {
+				Identifier activeId = buf.readIdentifier();
+				int count = buf.readVarInt();
+				List<JobProgressionState.JobLevelEntry> list = new ArrayList<>(count);
+				for (int i = 0; i < count; i++) {
+					list.add(JobProgressionState.JobLevelEntry.STREAM_CODEC.decode(buf));
+				}
+				int bonus = buf.readVarInt();
+				long gilVal = buf.readVarLong();
+				return new S2CProgressionSyncPayload(activeId, list, bonus, gilVal);
+			}
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public enum InventoryActionType {
+		SWAP_SLOTS,
+		RIGHT_CLICK_SLOT,
+		SORT_INVENTORY,
+		REQUEST_SYNC
+	}
+
+	public record C2SInventoryActionPayload(
+		InventoryActionType actionType,
+		int firstSlot,
+		int secondSlot
+	) implements CustomPacketPayload {
+		public static final Type<C2SInventoryActionPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "c2s_inventory_action")
+		);
+
+		public static final StreamCodec<FriendlyByteBuf, C2SInventoryActionPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				buf.writeEnum(p.actionType());
+				buf.writeVarInt(p.firstSlot());
+				buf.writeVarInt(p.secondSlot());
+			},
+			buf -> new C2SInventoryActionPayload(
+				buf.readEnum(InventoryActionType.class),
+				buf.readVarInt(),
+				buf.readVarInt()
+			)
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public record S2CInventorySyncPayload(
+		List<ItemStack> expandedBag,
+		List<ItemStack> keyItemsAndCrystals,
+		long gil
+	) implements CustomPacketPayload {
+		public static final Type<S2CInventorySyncPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "s2c_inventory_sync")
+		);
+
+		public static final StreamCodec<RegistryFriendlyByteBuf, S2CInventorySyncPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				ItemStack.OPTIONAL_LIST_STREAM_CODEC.encode(buf, p.expandedBag());
+				ItemStack.OPTIONAL_LIST_STREAM_CODEC.encode(buf, p.keyItemsAndCrystals());
+				buf.writeVarLong(p.gil());
+			},
+			buf -> new S2CInventorySyncPayload(
+				ItemStack.OPTIONAL_LIST_STREAM_CODEC.decode(buf),
+				ItemStack.OPTIONAL_LIST_STREAM_CODEC.decode(buf),
+				buf.readVarLong()
+			)
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public record C2SLevelCommandPayload(
+		boolean isSetLevel,
+		int value
+	) implements CustomPacketPayload {
+		public static final Type<C2SLevelCommandPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "c2s_level_command")
+		);
+
+		public static final StreamCodec<FriendlyByteBuf, C2SLevelCommandPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				buf.writeBoolean(p.isSetLevel());
+				buf.writeVarInt(p.value());
+			},
+			buf -> new C2SLevelCommandPayload(buf.readBoolean(), buf.readVarInt())
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public record C2SChatChannelPayload(
+		String channelName,
+		String targetPlayer,
+		String messageBody
+	) implements CustomPacketPayload {
+		public static final Type<C2SChatChannelPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "c2s_chat_channel")
+		);
+
+		public static final StreamCodec<FriendlyByteBuf, C2SChatChannelPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				buf.writeUtf(p.channelName());
+				buf.writeUtf(p.targetPlayer());
+				buf.writeUtf(p.messageBody());
+			},
+			buf -> new C2SChatChannelPayload(
+				buf.readUtf(32),
+				buf.readUtf(64),
+				buf.readUtf(512)
+			)
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	public record S2CChatChannelPayload(
+		String channelName,
+		String senderName,
+		String formattedText
+	) implements CustomPacketPayload {
+		public static final Type<S2CChatChannelPayload> TYPE = new Type<>(
+			Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "s2c_chat_channel")
+		);
+
+		public static final StreamCodec<FriendlyByteBuf, S2CChatChannelPayload> CODEC = StreamCodec.of(
+			(buf, p) -> {
+				buf.writeUtf(p.channelName());
+				buf.writeUtf(p.senderName());
+				buf.writeUtf(p.formattedText());
+			},
+			buf -> new S2CChatChannelPayload(
+				buf.readUtf(32),
+				buf.readUtf(64),
+				buf.readUtf(512)
+			)
 		);
 
 		@Override

@@ -41,8 +41,8 @@ class Milestone9And10Test {
 			MmoHudManager.WidgetRect hotbarRect = MmoHudManager.getWidgetRect(MmoConfig.HudWidgetId.ACTION_HOTBAR, sw, sh);
 
 			assertTrue(vitalsRect.enabled(), "PLAYER_VITALS must be enabled by default");
-			assertEquals(182, vitalsRect.width());
-			assertEquals(20, vitalsRect.height());
+			assertEquals(MmoConfig.HudWidgetId.PLAYER_VITALS.baseWidth(), vitalsRect.width());
+			assertEquals(MmoConfig.HudWidgetId.PLAYER_VITALS.baseHeight(), vitalsRect.height());
 
 			assertTrue(
 				vitalsRect.y() + vitalsRect.height() <= hotbarRect.y() - 4,

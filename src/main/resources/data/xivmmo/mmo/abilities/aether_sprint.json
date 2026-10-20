@@ -1,0 +1,23 @@
+{
+  "id": "xivmmo:aether_sprint",
+  "display_name": "Sprint",
+  "category": "ogcd",
+  "target_type": "self",
+  "aoe_shape": "none",
+  "range": 0.0,
+  "radius": 0.0,
+  "inner_radius": 0.0,
+  "cone_angle_degrees": 90.0,
+  "cast_ticks": 0,
+  "recast_ticks": 400,
+  "cooldown_group": "xivmmo:aether_sprint",
+  "max_charges": 1,
+  "animation_lock_ticks": 10,
+  "mana_cost": 0,
+  "potency": 150,
+  "combo_potency": 0,
+  "positional": "none",
+  "positional_potency": 0,
+  "can_move_while_casting": true,
+  "applied_status": "xivmmo:aether_surge"
+}

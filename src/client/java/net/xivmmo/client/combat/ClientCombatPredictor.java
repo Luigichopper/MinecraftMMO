@@ -8,11 +8,14 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.xivmmo.XivMmoMod;
+import net.xivmmo.client.hud.FfxivTheme;
 import net.xivmmo.client.hud.MmoHudManager;
 import net.xivmmo.client.hud.TargetFrameHud;
 import net.xivmmo.client.input.MmoInputHandler;
+import net.xivmmo.client.input.MmoKeybinds;
 import net.xivmmo.client.target.ClientTargetManager;
 import net.xivmmo.client.target.CursorRaycaster;
 import net.xivmmo.combat.ability.AbilityDefinition;
@@ -20,24 +23,37 @@ import net.xivmmo.combat.ability.JobDefinition;
 import net.xivmmo.combat.engine.PlayerCombatState;
 import net.xivmmo.config.MmoConfig;
 import net.xivmmo.data.MmoDataRegistry;
+import net.xivmmo.inventory.MmoInventoryState;
 import net.xivmmo.network.MmoNetwork;
+import net.xivmmo.progression.JobProgressionState;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
- * Client-side ability predictor, packet sender/reconciler, Job hotbar switcher,
- * and rearrangeable/scalable Cast Bar & MMO Action Hotbar HUD renderer.
+ * Client-side ability predictor, packet sender/reconciler, Job & Progression state holder,
+ * 140-slot Inventory client cache, and FFXIV Cast Bar & 12-Slot Action Hotbar renderer.
  */
 public final class ClientCombatPredictor {
-	private static final List<Identifier> PLAYABLE_JOBS = List.of(
+	public static final List<Identifier> PLAYABLE_JOBS = List.of(
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "vanguard"),
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "hierophant"),
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "lancer"),
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "arcanist")
 	);
 
-	private static final List<Identifier> DEFAULT_ACTION_BAR = List.of(
+	public static final List<Identifier> ROLE_ACTIONS = List.of(
+		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "second_wind"),
+		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "aether_sprint"),
+		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "limit_surge"),
+		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "sanctuary_ward")
+	);
+
+	private static final List<Identifier> DEFAULT_JOB_ACTIONS = List.of(
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "iron_slash"),
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "sunder_edge"),
 		Identifier.fromNamespaceAndPath(XivMmoMod.MOD_ID, "royal_crest"),
@@ -59,7 +75,23 @@ public final class ClientCombatPredictor {
 	private long lastFeedbackTimeMs = 0L;
 	private int lastFeedbackColor = 0xFFFFFFFF;
 
+	// Client-synced FFXIV Progression State
+	private final Map<Identifier, JobProgressionState.JobLevelEntry> clientJobProgress = new LinkedHashMap<>();
+	private long clientGil = 12500L;
+	private int clientArmouryBonusPercent = 0;
+
+	// Client-synced FFXIV 140-Slot Inventory + 35-Slot Key/Crystal State
+	private final MmoInventoryState clientInventory = new MmoInventoryState();
+
+	// Custom hotbar slot assignments per Job (from Actions & Traits 'P' window)
+	private final Map<Identifier, Identifier[]> customHotbarOverrides = new LinkedHashMap<>();
+
 	private ClientCombatPredictor() {
+		for (Identifier job : PLAYABLE_JOBS) {
+			clientJobProgress.put(job, new JobProgressionState.JobLevelEntry(
+				job, 1, 0L, JobProgressionState.getExpForNextLevel(1)
+			));
+		}
 	}
 
 	public static ClientCombatPredictor get() {
@@ -160,6 +192,36 @@ public final class ClientCombatPredictor {
 				TargetFrameHud.onCombatText(payload);
 			}
 		);
+
+		ClientPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.S2CProgressionSyncPayload.TYPE,
+			(payload, context) -> {
+				net.xivmmo.debug.MmoDebugState.recordPacket(
+					"S2C",
+					"progression_sync",
+					"job=" + payload.activeJobId() + " gil=" + payload.gil()
+				);
+				this.activeJobId = payload.activeJobId();
+				this.clientGil = payload.gil();
+				this.clientArmouryBonusPercent = payload.armouryBonusPercent();
+				for (JobProgressionState.JobLevelEntry entry : payload.jobs()) {
+					this.clientJobProgress.put(entry.jobId(), entry);
+				}
+			}
+		);
+
+		ClientPlayNetworking.registerGlobalReceiver(
+			MmoNetwork.S2CInventorySyncPayload.TYPE,
+			(payload, context) -> {
+				net.xivmmo.debug.MmoDebugState.recordPacket(
+					"S2C",
+					"inventory_sync",
+					"gil=" + payload.gil() + " expBag=" + payload.expandedBag().size()
+				);
+				this.clientGil = payload.gil();
+				this.clientInventory.applyClientSync(payload.expandedBag(), payload.keyItemsAndCrystals());
+			}
+		);
 	}
 
 	public void setActiveJob(Identifier jobId) {
@@ -170,6 +232,51 @@ public final class ClientCombatPredictor {
 
 	public Identifier getActiveJobId() {
 		return this.activeJobId;
+	}
+
+	public int getActiveJobLevel() {
+		return getJobProgress(this.activeJobId).level();
+	}
+
+	public JobProgressionState.JobLevelEntry getJobProgress(Identifier jobId) {
+		return this.clientJobProgress.getOrDefault(
+			jobId,
+			new JobProgressionState.JobLevelEntry(jobId, 1, 0L, JobProgressionState.getExpForNextLevel(1))
+		);
+	}
+
+	public Map<Identifier, JobProgressionState.JobLevelEntry> getAllJobProgress() {
+		return Collections.unmodifiableMap(this.clientJobProgress);
+	}
+
+	public long getClientGil() {
+		return this.clientGil;
+	}
+
+	public int getClientArmouryBonusPercent() {
+		return this.clientArmouryBonusPercent;
+	}
+
+	public ItemStack getClientInventorySlot(int index) {
+		Minecraft mc = Minecraft.getInstance();
+		return this.clientInventory.getSlot(mc.player, index);
+	}
+
+	public int getUsedMainInventoryCount() {
+		Minecraft mc = Minecraft.getInstance();
+		return this.clientInventory.getOccupiedMainSlotCount(mc.player);
+	}
+
+	public void sendInventoryAction(MmoNetwork.InventoryActionType action, int slotA, int slotB) {
+		if (ClientPlayNetworking.canSend(MmoNetwork.C2SInventoryActionPayload.TYPE)) {
+			ClientPlayNetworking.send(new MmoNetwork.C2SInventoryActionPayload(action, slotA, slotB));
+		}
+	}
+
+	public void sendLevelCommand(Identifier jobId, int value, boolean setLevelMode) {
+		if (ClientPlayNetworking.canSend(MmoNetwork.C2SLevelCommandPayload.TYPE)) {
+			ClientPlayNetworking.send(new MmoNetwork.C2SLevelCommandPayload(setLevelMode, value));
+		}
 	}
 
 	public void cycleNextJob() {
@@ -185,7 +292,10 @@ public final class ClientCombatPredictor {
 			return;
 		}
 		this.activeJobId = job.id();
-		showFeedback("Job: " + job.displayName() + " [" + job.role().getSerializedName().toUpperCase(Locale.ROOT) + "]", 0xFF66EEFF);
+		showFeedback(
+			"Job: " + job.displayName() + " (Lv. " + getJobProgress(job.id()).level() + ")",
+			0xFF66EEFF
+		);
 		if (ClientPlayNetworking.canSend(MmoNetwork.C2SSelectJobPayload.TYPE)) {
 			net.xivmmo.debug.MmoDebugState.recordPacket("C2S", "select_job", "job=" + job.id());
 			ClientPlayNetworking.send(new MmoNetwork.C2SSelectJobPayload(job.id()));
@@ -210,17 +320,55 @@ public final class ClientCombatPredictor {
 		}
 	}
 
+	/**
+	 * Returns the 12-slot FFXIV Action Bar for the current Job (slots 0..7 = Job actions, slots 8..11 = Role actions),
+	 * respecting any custom slot assignments made in the Actions & Traits ('P') window.
+	 */
 	public List<Identifier> getActionBar() {
 		JobDefinition job = MmoDataRegistry.getJob(this.activeJobId);
-		if (job != null && !job.abilities().isEmpty()) {
-			return job.abilities();
+		List<Identifier> baseJob = (job != null && !job.abilities().isEmpty()) ? job.abilities() : DEFAULT_JOB_ACTIONS;
+		List<Identifier> fullBar = new ArrayList<>(12);
+		for (int i = 0; i < 8; i++) {
+			fullBar.add(i < baseJob.size() ? baseJob.get(i) : DEFAULT_JOB_ACTIONS.get(i % DEFAULT_JOB_ACTIONS.size()));
 		}
-		return DEFAULT_ACTION_BAR;
+		fullBar.addAll(ROLE_ACTIONS);
+
+		Identifier[] overrides = this.customHotbarOverrides.get(this.activeJobId);
+		if (overrides != null) {
+			for (int i = 0; i < Math.min(12, overrides.length); i++) {
+				if (overrides[i] != null) {
+					fullBar.set(i, overrides[i]);
+				}
+			}
+		}
+		return fullBar;
+	}
+
+	public void assignAbilityToHotbarSlot(int slotIndex, Identifier abilityId) {
+		if (slotIndex < 0 || slotIndex >= 12) {
+			return;
+		}
+		if (MmoConfig.get().hotbarLocked) {
+			showFeedback("Hotbar is locked! Click the padlock icon to unlock.", 0xFFFF8844);
+			return;
+		}
+		Identifier[] overrides = this.customHotbarOverrides.computeIfAbsent(this.activeJobId, k -> new Identifier[12]);
+		overrides[slotIndex] = abilityId;
+		AbilityDefinition def = MmoDataRegistry.getAbility(abilityId);
+		showFeedback("Assigned " + (def != null ? def.displayName() : abilityId.getPath()) + " to Slot " + MmoKeybinds.FFXIV_HOTBAR_LABELS[slotIndex], 0xFFFFDF66);
 	}
 
 	public void requestAbilitySlot(int slotIndex) {
 		List<Identifier> bar = getActionBar();
 		if (slotIndex < 0 || slotIndex >= bar.size()) {
+			return;
+		}
+		int unlockLv = JobProgressionState.getSlotUnlockLevel(slotIndex);
+		int currentLv = getActiveJobLevel();
+		if (currentLv < unlockLv) {
+			AbilityDefinition def = MmoDataRegistry.getAbility(bar.get(slotIndex));
+			String name = def != null ? def.displayName() : bar.get(slotIndex).getPath();
+			showFeedback(name + " unlocks at Job Lv. " + unlockLv + " (Current: Lv. " + currentLv + ")", 0xFFFF6655);
 			return;
 		}
 		requestAbility(bar.get(slotIndex));
@@ -372,8 +520,8 @@ public final class ClientCombatPredictor {
 	}
 
 	/**
-	 * Renders the rearrangeable & scalable {@link MmoConfig.HudWidgetId#CAST_BAR} and
-	 * {@link MmoConfig.HudWidgetId#ACTION_HOTBAR} widgets.
+	 * Renders the FFXIV-styled {@link MmoConfig.HudWidgetId#CAST_BAR} and
+	 * 12-Slot {@link MmoConfig.HudWidgetId#ACTION_HOTBAR} widgets.
 	 */
 	public static void renderHud(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
 		Minecraft mc = Minecraft.getInstance();
@@ -389,7 +537,7 @@ public final class ClientCombatPredictor {
 		int sw = mc.getWindow().getGuiScaledWidth();
 		int sh = mc.getWindow().getGuiScaledHeight();
 
-		// 1. CAST_BAR Widget (Cast Bar + Slidecast Zone + Player Statuses + MP/GCD Gauge)
+		// 1. CAST_BAR Widget (FFXIV Cast Progress Bar + Slidecast Zone + Player Statuses)
 		MmoHudManager.WidgetRect castRect = MmoHudManager.getWidgetRect(
 			MmoConfig.HudWidgetId.CAST_BAR, sw, sh
 		);
@@ -397,10 +545,10 @@ public final class ClientCombatPredictor {
 			MmoHudManager.pushWidgetTransform(graphics, castRect);
 			int cbWidth = MmoConfig.HudWidgetId.CAST_BAR.baseWidth();
 
-			// Player active buffs row right above the Cast/GCD bar
+			// Player active buffs row right above the Cast bar
 			List<MmoNetwork.StatusBadge> playerStatuses = TargetFrameHud.getClientPlayerStatuses();
 			if (!playerStatuses.isEmpty()) {
-				TargetFrameHud.drawStatusRow(graphics, mc, playerStatuses, 0, -15);
+				TargetFrameHud.drawStatusRow(graphics, mc, playerStatuses, 0, -16);
 			}
 
 			PlayerCombatState.ActiveCast cast = state.getActiveCast();
@@ -411,46 +559,30 @@ public final class ClientCombatPredictor {
 				float progress = Mth.clamp((cast.elapsedTicks() + partial) / Math.max(1, cast.totalTicks()), 0.0F, 1.0F);
 				float remSeconds = Math.max(0.0F, (cast.totalTicks() - cast.elapsedTicks() - partial) / 20.0F);
 
-				int cbHeight = 13;
-				graphics.fill(-1, -1, cbWidth + 1, cbHeight + 1, 0xD010141E);
-				graphics.fill(0, 0, cbWidth, cbHeight, 0xFF1E2430);
+				int cbHeight = 9;
+				graphics.fill(-2, 8, cbWidth + 2, 8 + cbHeight + 3, 0xDD121318);
+				graphics.outline(-2, 8, cbWidth + 4, cbHeight + 3, FfxivTheme.GOLD_RULE);
+				FfxivTheme.drawGaugeBar(graphics, 0, 10, cbWidth, cbHeight - 1, progress, 0xFFE6A832, 0xFFFFDF88);
 
 				float slideRatio = Mth.clamp((float) PlayerCombatState.SLIDECAST_WINDOW_TICKS / cast.totalTicks(), 0.0F, 0.5F);
 				int slideW = (int) (cbWidth * slideRatio);
 				if (slideW > 0) {
-					graphics.fill(cbWidth - slideW, 0, cbWidth, cbHeight, 0x6044AA66);
+					graphics.fill(cbWidth - slideW, 10, cbWidth, 10 + cbHeight - 1, 0x7055FF88);
 				}
 
-				int fillW = (int) (cbWidth * progress);
-				if (fillW > 0) {
-					graphics.fill(0, 0, fillW, cbHeight, 0xFFEEAA33);
-				}
-
-				graphics.text(mc.font, "CAST: " + castName, 4, 3, 0xFFFFFFFF, true);
-				String timeStr = String.format(Locale.ROOT, "%.2fs", remSeconds);
-				graphics.text(mc.font, timeStr, cbWidth - mc.font.width(timeStr) - 4, 3, 0xFFFFFFFF, true);
+				graphics.text(mc.font, castName, 2, -1, FfxivTheme.TEXT_CREAM, true);
+				String timeStr = String.format(Locale.ROOT, "%.2f", remSeconds);
+				graphics.text(mc.font, timeStr, cbWidth - mc.font.width(timeStr) - 2, -1, FfxivTheme.TEXT_GOLD, true);
 			}
 
-			JobDefinition job = MmoDataRegistry.getJob(predictor.activeJobId);
-			String jobTitle = job != null ? job.displayName() : "Vanguard";
-			String mpText = String.format(
-				Locale.ROOT,
-				"[%s] MP: %d/%d | GCD: %.2fs",
-				jobTitle,
-				state.getMana(),
-				state.getMaxMana(),
-				state.getGcdRemainingTicks() / 20.0F
-			);
-			graphics.centeredText(mc.font, mpText, cbWidth / 2, 15, 0xFFB8D8FF);
-
 			if (System.currentTimeMillis() - predictor.lastFeedbackTimeMs < 2000L && !predictor.lastFeedbackBanner.isEmpty()) {
-				graphics.centeredText(mc.font, predictor.lastFeedbackBanner, cbWidth / 2, -28, predictor.lastFeedbackColor);
+				graphics.centeredText(mc.font, predictor.lastFeedbackBanner, cbWidth / 2, -26, predictor.lastFeedbackColor);
 			}
 
 			MmoHudManager.popWidgetTransform(graphics);
 		}
 
-		// 2. ACTION_HOTBAR Widget (can be rearranged, scaled, or completely hidden/removed via F9 or HUD Editor)
+		// 2. ACTION_HOTBAR Widget: Authentic 12-Slot FFXIV Hotbar (Page Badge '1' + 12 Slots + Padlock)
 		MmoHudManager.WidgetRect hotbarRect = MmoHudManager.getWidgetRect(
 			MmoConfig.HudWidgetId.ACTION_HOTBAR, sw, sh
 		);
@@ -458,75 +590,113 @@ public final class ClientCombatPredictor {
 			MmoHudManager.pushWidgetTransform(graphics, hotbarRect);
 
 			List<Identifier> actionBar = predictor.getActionBar();
-			int slotCount = actionBar.size();
-			int slotSize = 32;
-			int slotGap = 5;
+			int slotCount = Math.min(12, actionBar.size());
+			int slotSize = 24;
+			int slotGap = 2;
+			int startX = 18;
+			int sy = 5;
+
+			// Left Page Badge ('1' for primary bar, cycles Job when clicked)
+			int jobPageNum = PLAYABLE_JOBS.indexOf(predictor.activeJobId) + 1;
+			FfxivTheme.drawHotbarPageBadge(graphics, mc.font, 0, sy - 1, Math.max(1, jobPageNum));
 
 			Identifier queuedId = state.getQueuedAbility() != null ? state.getQueuedAbility().abilityId() : null;
 			Identifier comboLastId = state.getLastComboAbilityId();
+			int currentJobLv = predictor.getActiveJobLevel();
 
 			for (int i = 0; i < slotCount; i++) {
 				Identifier abilId = actionBar.get(i);
 				AbilityDefinition def = MmoDataRegistry.getAbility(abilId);
-				int sx = i * (slotSize + slotGap);
-				int sy = 4;
+				int sx = startX + i * (slotSize + slotGap);
 
+				int unlockLv = JobProgressionState.getSlotUnlockLevel(i);
+				boolean unlocked = currentJobLv >= unlockLv;
 				boolean isQueued = abilId.equals(queuedId);
-				boolean isComboReady = def != null
+				boolean isComboReady = unlocked && def != null
 					&& def.comboPrerequisite().isPresent()
 					&& state.getComboRemainingTicks() > 0
 					&& def.comboPrerequisite().get().equals(comboLastId);
 
-				int borderColor = isQueued ? 0xFF55FFFF : (isComboReady ? 0xFFFFCC22 : 0xFF445066);
-				graphics.fill(sx - 1, sy - 1, sx + slotSize + 1, sy + slotSize + 1, borderColor);
-				graphics.fill(sx, sy, sx + slotSize, sy + slotSize, 0xD8141824);
+				// Dark beveled slot well
+				FfxivTheme.drawRecessedSlot(graphics, sx - 1, sy - 1, slotSize + 2, false, isComboReady, 0);
 
 				if (def != null) {
-					PlayerCombatState.CooldownGroupState cd = state.getOrCreateCooldownGroup(def);
-					int remTicks = def.isGcd()
-						? Math.max(state.getGcdRemainingTicks(), cd.currentCharges() == 0 ? cd.rechargeRemainingTicks() : 0)
-						: (cd.currentCharges() == 0 ? cd.rechargeRemainingTicks() : 0);
-					int totalTicks = def.isGcd() ? Math.max(1, state.getGcdTotalTicks()) : Math.max(1, cd.rechargeTotalTicks());
+					FfxivTheme.drawAbilityIcon(graphics, sx, sy, slotSize, def, unlocked);
 
-					if (remTicks > 0) {
-						float ratio = Mth.clamp((float) remTicks / totalTicks, 0.0F, 1.0F);
-						int overlayH = (int) (slotSize * ratio);
-						graphics.fill(sx, sy + (slotSize - overlayH), sx + slotSize, sy + slotSize, 0x98000000);
-						String secStr = String.format(Locale.ROOT, "%.1f", remTicks / 20.0F);
-						graphics.centeredText(mc.font, secStr, sx + slotSize / 2, sy + 12, 0xFFFFDD66);
+					if (unlocked) {
+						PlayerCombatState.CooldownGroupState cd = state.getOrCreateCooldownGroup(def);
+						int remTicks = def.isGcd()
+							? Math.max(state.getGcdRemainingTicks(), cd.currentCharges() == 0 ? cd.rechargeRemainingTicks() : 0)
+							: (cd.currentCharges() == 0 ? cd.rechargeRemainingTicks() : 0);
+						int totalTicks = def.isGcd() ? Math.max(1, state.getGcdTotalTicks()) : Math.max(1, cd.rechargeTotalTicks());
+
+						if (remTicks > 0) {
+							float ratio = Mth.clamp((float) remTicks / totalTicks, 0.0F, 1.0F);
+							int overlayH = (int) (slotSize * ratio);
+							graphics.fill(sx + 1, sy + (slotSize - overlayH), sx + slotSize - 1, sy + slotSize - 1, 0xAA050608);
+							String secStr = remTicks >= 20
+								? Integer.toString((remTicks + 19) / 20)
+								: String.format(Locale.ROOT, ".%d", (remTicks * 10) / 20);
+							graphics.centeredText(mc.font, secStr, sx + slotSize / 2, sy + 8, 0xFFFFDF77);
+						}
+
+						// Bottom-left MP cost in magenta (just like FFXIV screenshot #2: '400', '300')
+						if (def.manaCost() > 0) {
+							String mpCostStr = Integer.toString(def.manaCost());
+							graphics.pose().pushMatrix();
+							graphics.pose().translate(sx + 2.0F, sy + slotSize - 6.0F);
+							graphics.pose().scale(0.65F, 0.65F);
+							graphics.text(mc.font, mpCostStr, 0, 0, FfxivTheme.TEXT_MP_MAGENTA, true);
+							graphics.pose().popMatrix();
+						} else if (def.maxCharges() > 1) {
+							String chg = "x" + cd.currentCharges();
+							graphics.pose().pushMatrix();
+							graphics.pose().translate(sx + slotSize - 9.0F, sy + slotSize - 6.0F);
+							graphics.pose().scale(0.65F, 0.65F);
+							graphics.text(mc.font, chg, 0, 0, FfxivTheme.TEXT_HP_GREEN, true);
+							graphics.pose().popMatrix();
+						}
 					} else {
-						String abbrev = abbreviate(def.displayName());
-						graphics.centeredText(
-							mc.font,
-							abbrev,
-							sx + slotSize / 2,
-							sy + 12,
-							def.isGcd() ? 0xFFE8F0FF : 0xFF77FFCC
-						);
-					}
-
-					if (def.maxCharges() > 1) {
-						String chg = "x" + cd.currentCharges();
-						graphics.text(mc.font, chg, sx + slotSize - mc.font.width(chg) - 1, sy + slotSize - 8, 0xFF88FF88, true);
+						// Locked slot indicator ('LvXX')
+						String lvReq = "L" + unlockLv;
+						graphics.pose().pushMatrix();
+						graphics.pose().translate(sx + 4.0F, sy + 10.0F);
+						graphics.pose().scale(0.70F, 0.70F);
+						graphics.text(mc.font, lvReq, 0, 0, 0xFFFF7766, true);
+						graphics.pose().popMatrix();
 					}
 				}
 
-				if (i < net.xivmmo.client.input.MmoKeybinds.KEY_ABILITY_SLOTS.length) {
-					String keyHint = net.xivmmo.client.input.MmoKeybinds.KEY_ABILITY_SLOTS[i].getTranslatedKeyMessage().getString();
-					if (keyHint.length() > 3) {
-						keyHint = keyHint.substring(0, 3);
-					}
-					graphics.text(mc.font, keyHint, sx + 2, sy + 1, 0xFFA0B0C8, true);
+				// Combo golden marching-ants border or Queued cyan highlight
+				if (isComboReady) {
+					boolean pulse = (System.currentTimeMillis() / 180L) % 2L == 0L;
+					graphics.outline(sx - 1, sy - 1, slotSize + 2, slotSize + 2, pulse ? 0xFFFFEA55 : 0xFFFFAA00);
+				} else if (isQueued) {
+					graphics.outline(sx - 1, sy - 1, slotSize + 2, slotSize + 2, 0xFF55FFFF);
 				}
+
+				// Top-left crisp FFXIV keybind number ('1'..'9', '0', '-', '=')
+				String keyLabel = i < MmoKeybinds.FFXIV_HOTBAR_LABELS.length
+					? MmoKeybinds.FFXIV_HOTBAR_LABELS[i]
+					: Integer.toString(i + 1);
+				graphics.pose().pushMatrix();
+				graphics.pose().translate(sx + 2.0F, sy + 1.0F);
+				graphics.pose().scale(0.75F, 0.75F);
+				graphics.text(mc.font, keyLabel, 0, 0, 0xFFFFFFFF, true);
+				graphics.pose().popMatrix();
 			}
+
+			// Right Padlock icon
+			int lockX = startX + slotCount * (slotSize + slotGap) + 2;
+			FfxivTheme.drawPadlockIcon(graphics, lockX, sy + 5, MmoConfig.get().hotbarLocked);
 
 			MmoHudManager.popWidgetTransform(graphics);
 		}
 	}
 
 	/**
-	 * Checks whether a left-click in GUI coordinates hit one of the MMO Action Bar slots
-	 * (respecting custom drag-and-drop position, scale, and visibility).
+	 * Checks whether a left-click in GUI coordinates hit one of the 12 MMO Action Bar slots,
+	 * the left Page Badge (cycles Job), or the right Padlock icon.
 	 */
 	public boolean tryClickActionBar(double guiX, double guiY, int sw, int sh) {
 		MmoHudManager.WidgetRect rect = MmoHudManager.getWidgetRect(MmoConfig.HudWidgetId.ACTION_HOTBAR, sw, sh);
@@ -537,29 +707,39 @@ public final class ClientCombatPredictor {
 		double localX = (guiX - rect.x()) / Math.max(0.5F, rect.scale());
 		double localY = (guiY - rect.y()) / Math.max(0.5F, rect.scale());
 
-		int slotSize = 32;
-		int slotGap = 5;
-		int sy = 4;
-		if (localY < sy - 1 || localY > sy + slotSize + 1) {
+		int slotSize = 24;
+		int slotGap = 2;
+		int startX = 18;
+		int sy = 5;
+		if (localY < sy - 2 || localY > sy + slotSize + 2) {
 			return false;
 		}
 
+		// Left Page Badge click -> cycle Job
+		if (localX >= 0 && localX <= 15) {
+			cycleNextJob();
+			return true;
+		}
+
 		List<Identifier> bar = getActionBar();
-		for (int i = 0; i < bar.size(); i++) {
-			int sx = i * (slotSize + slotGap);
+		int slotCount = Math.min(12, bar.size());
+		for (int i = 0; i < slotCount; i++) {
+			int sx = startX + i * (slotSize + slotGap);
 			if (localX >= sx - 1 && localX <= sx + slotSize + 1) {
 				requestAbilitySlot(i);
 				return true;
 			}
 		}
-		return false;
-	}
 
-	private static String abbreviate(String displayName) {
-		String[] parts = displayName.split("\\s+");
-		if (parts.length >= 2) {
-			return ("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase(Locale.ROOT);
+		// Right Padlock click -> toggle hotbar lock
+		int lockX = startX + slotCount * (slotSize + slotGap) + 2;
+		if (localX >= lockX && localX <= lockX + 14) {
+			MmoConfig cfg = MmoConfig.get();
+			cfg.hotbarLocked = !cfg.hotbarLocked;
+			cfg.save();
+			showFeedback("Hotbar " + (cfg.hotbarLocked ? "LOCKED" : "UNLOCKED"), FfxivTheme.TEXT_GOLD);
+			return true;
 		}
-		return displayName.substring(0, Math.min(2, displayName.length())).toUpperCase(Locale.ROOT);
+		return false;
 	}
 }

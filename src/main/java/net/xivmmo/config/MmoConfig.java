@@ -72,6 +72,33 @@ public final class MmoConfig {
 	public boolean showMmoActionHotbar = true;
 
 	/**
+	 * When true, replaces vanilla heart/hunger icons in MMO Combat Mode with the FFXIV Bottom Parameter Bar
+	 * (HP / MP / TP gauges with crisp numeric readouts + full-width bottom Level/EXP bar).
+	 */
+	public boolean useFfxivParameterBar = true;
+
+	/**
+	 * When true, pressing the Inventory key ('E' or 'I') in MMO Combat Mode opens the 140-slot FFXIV Inventory Screen.
+	 */
+	public boolean replaceVanillaInventoryInMmoMode = true;
+
+	/**
+	 * FFXIV Hotbar Padlock toggle (right side of the 12-slot hotbar).
+	 */
+	public boolean hotbarLocked = false;
+
+	/**
+	 * When true, replaces the vanilla chat HUD and chat screen in MMO Mode with the persistent
+	 * bottom-left FFXIV multi-tab Chat Log (General / Battle / Event / +).
+	 */
+	public boolean useFfxivChatInMmoMode = true;
+
+	/**
+	 * When true, prepends [HH:mm] timestamps to messages in the FFXIV Chat Log.
+	 */
+	public boolean showChatTimestamps = false;
+
+	/**
 	 * Configurable scale (0.0..1.0) for how much vanilla Armor reduces incoming MMO ability damage.
 	 */
 	public float armorMitigationScale = 0.50F;
@@ -80,13 +107,14 @@ public final class MmoConfig {
 	 * Identifiers for every rearrangeable, scalable, and toggleable MMO HUD element.
 	 */
 	public enum HudWidgetId {
-		TARGET_FRAME("Target & ToT Frame", 0.50F, 0.05F, 1.0F, true, 220, 48),
-		FOCUS_TARGET("Focus Target", 0.78F, 0.16F, 1.0F, true, 120, 26),
-		CAST_BAR("Cast & GCD Bar", 0.50F, 0.69F, 1.0F, true, 180, 26),
-		PLAYER_VITALS("Health & Hunger Bars", 0.50F, 0.78F, 1.0F, true, 182, 20),
-		ACTION_HOTBAR("MMO Action Hotbar", 0.50F, 0.87F, 1.0F, true, 296, 42),
-		PARTY_LIST("Party & Role List", 0.08F, 0.28F, 1.0F, true, 136, 108),
-		COMBAT_TEXT("Floating Combat Text", 0.56F, 0.42F, 1.0F, true, 120, 60);
+		TARGET_FRAME("Target & ToT Frame", 0.50F, 0.05F, 1.0F, true, 236, 50),
+		FOCUS_TARGET("Focus Target", 0.78F, 0.16F, 1.0F, true, 128, 28),
+		CAST_BAR("Cast & GCD Bar", 0.50F, 0.68F, 1.0F, true, 190, 26),
+		PLAYER_VITALS("Parameter Bar (HP/MP/TP)", 0.50F, 0.77F, 1.0F, true, 246, 22),
+		ACTION_HOTBAR("12-Slot FFXIV Hotbar", 0.50F, 0.85F, 1.0F, true, 344, 38),
+		PARTY_LIST("Light Party List", 0.09F, 0.24F, 1.0F, true, 168, 126),
+		COMBAT_TEXT("Floating Combat Text", 0.56F, 0.42F, 1.0F, true, 120, 60),
+		CHAT_LOG("FFXIV Chat Log", 0.16F, 0.67F, 1.0F, true, 276, 148);
 
 		private final String displayName;
 		private final float defaultNormX;

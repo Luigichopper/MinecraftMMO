@@ -64,6 +64,48 @@ class CursorRaycasterTest {
 	}
 
 	@Test
+	void testReverseZProjectionUnprojectsForwardAndHitsMobAabb() {
+		// Minecraft 26.2 Projection uses Reverse-Z: setPerspective(fov, aspect, zFar, zNear, zZeroToOne)
+		Matrix4f reverseZProj = new Matrix4f().setPerspective(
+			(float) Math.toRadians(70.0),
+			16.0F / 9.0F,
+			256.0F, // zFar passed as 3rd param in Reverse-Z
+			0.05F,  // zNear passed as 4th param in Reverse-Z
+			true
+		);
+		Matrix4f invScratch = new Matrix4f();
+		Vector3f nearScratch = new Vector3f();
+		Vector3f farScratch = new Vector3f();
+		Vector3f outDir = new Vector3f();
+
+		// Center cursor (960, 540) must still point forward along -Z (not +Z backwards!)
+		CursorRaycaster.unprojectToRayDirection(
+			reverseZProj,
+			960.0F,
+			540.0F,
+			1920.0F,
+			1080.0F,
+			invScratch,
+			nearScratch,
+			farScratch,
+			outDir
+		);
+		assertEquals(0.0F, outDir.x, 1e-4F);
+		assertEquals(0.0F, outDir.y, 1e-4F);
+		assertEquals(-1.0F, outDir.z, 1e-4F);
+
+		// Ray from camera (0, 1.6, 0) along outDir (0, 0, -1) must hit a mob standing at (0, 0..2, -8)
+		double hitT = CursorRaycaster.intersectRayAabb(
+			0.0, 1.6, 0.0,
+			outDir.x, outDir.y, outDir.z,
+			-0.6, 0.0, -8.6,
+			0.6, 2.0, -7.4,
+			30.0
+		);
+		assertTrue(hitT > 7.0 && hitT < 8.0);
+	}
+
+	@Test
 	void testRayVsAabbHitMissAndMaxRange() {
 		// Ray from origin (0, 1.5, 0) along +Z (0, 0, 1) against AABB at z in [5, 6]
 		double hitDist = CursorRaycaster.intersectRayAabb(
